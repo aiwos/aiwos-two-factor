@@ -8,9 +8,9 @@
  * @license     GPL-2.0-or-later
  *
  * @wordpress-plugin
- * Plugin Name: Two Factor
+ * Plugin Name: Two Factor (CUSTOMIZED, DO NOT UPDATE)
  * Plugin URI: https://wordpress.org/plugins/two-factor/
- * Description: Two-Factor Authentication using time-based one-time passwords, Universal 2nd Factor (FIDO U2F), email and backup verification codes.
+ * Description: DO NOT UPDATE, featuring internally generated QR codes and a frontend TOTP activation.
  * Author: Plugin Contributors
  * Version: 0.7.1
  * Author URI: https://github.com/wordpress/two-factor/graphs/contributors
