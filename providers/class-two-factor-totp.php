@@ -97,7 +97,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 					<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor' ); ?>
 				</p>
 				<p>
-					<img src="<?php echo esc_url( $this->get_google_qr_code( $totp_title, $key, $site_name ) ); ?>" id="two-factor-totp-qrcode" />
+					<img src="<?php echo esc_url( $this->get_qr_code( $totp_title, $key, $site_name ) ); ?>" id="two-factor-totp-qrcode" />
 				</p>
 				<p>
 					<code><?php echo esc_html( $key ); ?></code>
