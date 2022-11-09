@@ -12,7 +12,7 @@
  * Plugin URI: https://wordpress.org/plugins/two-factor/
  * Description: DO NOT UPDATE, featuring internally generated QR codes and a frontend TOTP activation.
  * Author: Plugin Contributors
- * Version: 0.7.1
+ * Version: 0.7.3
  * Author URI: https://github.com/wordpress/two-factor/graphs/contributors
  * Network: True
  * Text Domain: two-factor
@@ -26,7 +26,7 @@ define( 'TWO_FACTOR_DIR', plugin_dir_path( __FILE__ ) );
 /**
  * Version of the plugin.
  */
-define( 'TWO_FACTOR_VERSION', '0.7.1' );
+define( 'TWO_FACTOR_VERSION', '0.7.3' );
 
 /**
  * Set up the autoloader to handle classes in the includes directory.
