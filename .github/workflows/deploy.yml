@@ -32,7 +32,8 @@ jobs:
       - name: Install NPM dependencies
         run: npm install
       - name: Prepare for artifact creation
-        run: rm -rf node_modules
+        run: |
+             rm -rf node_modules
              mkdir two-factor
              rsync -a ./ ./two-factor --exclude two-factor
              mkdir build
