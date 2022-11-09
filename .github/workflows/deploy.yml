@@ -2,9 +2,6 @@ name: Deploy
 
 # Run deploy only on tag and master builds.
 on:
-  push:
-    branches:
-      - master
   release:
     types: [published]
 
