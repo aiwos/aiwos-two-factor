@@ -162,7 +162,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 							} else {
 
 								$enabled_providers = get_user_meta( $user_id, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY, true );
-								if ( $enabled_providers === false ) {
+								if ( empty( $enabled_providers ) ) {
 									$enabled_providers = array();
 								}
 
