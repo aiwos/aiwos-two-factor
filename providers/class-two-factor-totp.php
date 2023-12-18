@@ -161,7 +161,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 								$errors[] = __( 'Unable to save Two Factor Authentication code. Please re-scan the QR code and enter the code provided by your application.', 'two-factor' );
 							} else {
 
-								$enabled_providers = get_user_meta( $user_id, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY );
+								$enabled_providers = get_user_meta( $user_id, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY, true );
 								if ( $enabled_providers === false ) {
 									$enabled_providers = array();
 								}
