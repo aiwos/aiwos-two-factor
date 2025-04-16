@@ -19,10 +19,10 @@ class Two_Factor_Totp extends Two_Factor_Provider
     const SECRET_META_KEY = '_two_factor_totp_key';
 
     /**
-     * The user meta token key.
-     *
-     * @var string
-     */
+    * The user meta token key.
+    *
+    * @var string
+    */
     const NOTICES_META_KEY = '_two_factor_totp_notices';
 
     /**
@@ -58,7 +58,7 @@ class Two_Factor_Totp extends Two_Factor_Provider
         add_action('two_factor_user_options_' . __CLASS__, array( $this, 'user_two_factor_options' ));
 
         add_shortcode('two-factor-set-totp', array( $this, 'topt_shortcode' ));
-
+        
         // Save options if shortcode form is submitted.
         if (isset($_REQUEST['_nonce_user_two_factor_totp_options_shortcode']) ) {
             $this->user_two_factor_options_update_shortcode(get_current_user_id());
@@ -86,11 +86,16 @@ class Two_Factor_Totp extends Two_Factor_Provider
 
             $key = $this->get_user_totp_key($user->ID);
 
-            $this->admin_notices($user->ID);
+            wp_enqueue_script('two-factor-qr-code-generator');
+            wp_enqueue_script('wp-api-request');
+            wp_enqueue_script('jquery');
+
+            // $this->admin_notices( $user->ID );
 
             if (empty($key) ) :
-                $key        = $this->generate_key();
+                $key      = $this->generate_key();
                 $site_name  = get_bloginfo('name', 'display');
+                $totp_url = $this->generate_qr_code_url($user, $key);
                 $totp_title = apply_filters('two_factor_totp_title', $site_name . ':' . $user->user_login, $user);
                 ?>
                 <form>
@@ -98,11 +103,57 @@ class Two_Factor_Totp extends Two_Factor_Provider
                  wp_nonce_field('user_two_factor_totp_options_shortcode', '_nonce_user_two_factor_totp_options_shortcode', false);
                 ?>
                 <p>
-                 <?php esc_html_e('Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor'); ?>
-                </p>
-                <p>
-                    <img src="<?php echo esc_url($this->get_qr_code($totp_title, $key, $site_name)); ?>" id="two-factor-totp-qrcode" />
-                </p>
+                <?php esc_html_e('Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor'); ?>
+            </p>
+            <p id="two-factor-qr-code">
+                <a href="<?php echo $totp_url; ?>">
+                    Loading...
+                    <img src="<?php echo esc_url(admin_url('images/spinner.gif')); ?>" alt="" />
+                </a>
+            </p>
+
+            <style>
+                #two-factor-qr-code {
+                    /* The size of the image will change based on the length of the URL inside it. */
+                    min-width: 205px;
+                    min-height: 205px;
+                }
+            </style>
+
+            <script>
+                (function(){
+                    var qr_generator = function() {
+                        /*
+                        * 0 = Automatically select the version, to avoid going over the limit of URL
+                        *     length.
+                        * L = Least amount of error correction, because it's not needed when scanning
+                        *     on a monitor, and it lowers the image size.
+                        */
+                        var qr = qrcode( 0, 'L' );
+
+                        qr.addData( <?php echo wp_json_encode($totp_url); ?> );
+                        qr.make();
+
+                        document.querySelector( '#two-factor-qr-code a' ).innerHTML = qr.createSvgTag( 5 );
+
+                        // For accessibility, markup the SVG with a title and role.
+                        var svg = document.querySelector( '#two-factor-qr-code a svg' ),
+                            title = document.createElement( 'title' );
+
+                        svg.role = 'image';
+                        svg.ariaLabel = <?php echo wp_json_encode(__('Authenticator App QR Code', 'two-factor')); ?>;
+                        title.innerText = svg.ariaLabel;
+                        svg.appendChild( title );
+                    };
+
+                    // Run now if the document is loaded, otherwise on DOMContentLoaded.
+                    if ( document.readyState === 'complete' ) {
+                        qr_generator();
+                    } else {
+                        window.addEventListener( 'DOMContentLoaded', qr_generator );
+                    }
+                })();
+            </script>
                 <p>
                     <code><?php echo esc_html($key); ?></code>
                 </p>
@@ -135,8 +186,7 @@ class Two_Factor_Totp extends Two_Factor_Provider
 
         return $content;
     }
-
-
+    
     /**
      * Save the options after submitting the shortcode totp form. Enables the totp provider and sets it as primary provider.
      *
@@ -200,60 +250,6 @@ class Two_Factor_Totp extends Two_Factor_Provider
     }
 
     /**
-     * Display any available admin notices.
-     *
-     * @param integer $user_id User ID.
-     *
-     * @return void
-     *
-     * @codeCoverageIgnore
-     */
-    public function admin_notices( $user_id )
-    {
-        $notices = get_user_meta($user_id, self::NOTICES_META_KEY, true);
-
-        if (! empty($notices) ) {
-            delete_user_meta($user_id, self::NOTICES_META_KEY);
-
-            foreach ( $notices as $class => $messages ) {
-                ?>
-                <div class="<?php echo esc_attr($class); ?>">
-                <?php
-                foreach ( $messages as $msg ) {
-                    ?>
-                        <p>
-                            <span><?php echo esc_html($msg); ?><span>
-                        </p>
-                    <?php
-                }
-                ?>
-                </div>
-                <?php
-            }
-        }
-    }
-
-    /**
-     * Uses the Google Charts API to build a QR Code for use with an otpauth url
-     *
-     * @param string $name  The name to display in the Authentication app.
-     * @param string $key   The secret key to share with the Authentication app.
-     * @param string $title The title to display in the Authentication app.
-     *
-     * @return string A URL to use as an img src to display the QR code
-     */
-    public static function get_qr_code( $name, $key, $title = null )
-    {
-        // Encode to support spaces, question marks and other characters.
-        $name        = rawurlencode($name);
-        $otpauth_uri = urlencode('otpauth://totp/' . $name . '?secret=' . $key);
-        if (isset($title) ) {
-            $otpauth_uri .= urlencode('&issuer=' . rawurlencode($title));
-        }
-        return get_admin_url(null, 'admin-ajax.php?action=two-factor_qr&uri=' . $otpauth_uri);
-    }
-
-    /**
      * Register the rest-api endpoints required for this provider.
      *
      * @codeCoverageIgnore
@@ -284,16 +280,16 @@ class Two_Factor_Totp extends Two_Factor_Provider
                         return Two_Factor_Core::rest_api_can_edit_user_and_update_two_factor_options($request['user_id']);
                     },
                     'args'                => array(
-                        'user_id'         => array(
+                        'user_id' => array(
                             'required' => true,
                             'type'     => 'integer',
                         ),
-                        'key'             => array(
+                        'key'     => array(
                             'type'              => 'string',
                             'default'           => '',
                             'validate_callback' => null, // Note: validation handled in ::rest_setup_totp().
                         ),
-                        'code'            => array(
+                        'code'    => array(
                             'type'              => 'string',
                             'default'           => '',
                             'validate_callback' => null, // Note: validation handled in ::rest_setup_totp().
@@ -366,10 +362,10 @@ class Two_Factor_Totp extends Two_Factor_Provider
         $this->user_two_factor_options($user);
         $html = ob_get_clean();
 
-        return array(
+        return [
         'success' => true,
         'html'    => $html,
-        );
+        ];
     }
 
     /**
@@ -406,10 +402,10 @@ class Two_Factor_Totp extends Two_Factor_Provider
         $this->user_two_factor_options($user);
         $html = ob_get_clean();
 
-        return array(
+        return [
         'success' => true,
         'html'    => $html,
-        );
+        ];
     }
 
     /**
@@ -527,6 +523,7 @@ class Two_Factor_Totp extends Two_Factor_Provider
                         *     on a monitor, and it lowers the image size.
                         */
                         var qr = qrcode( 0, 'L' );
+                        console.log(qr);
 
                         qr.addData( <?php echo wp_json_encode($totp_url); ?> );
                         qr.make();
