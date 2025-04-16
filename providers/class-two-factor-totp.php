@@ -90,8 +90,6 @@ class Two_Factor_Totp extends Two_Factor_Provider
             wp_enqueue_script('wp-api-request');
             wp_enqueue_script('jquery');
 
-            // $this->admin_notices( $user->ID );
-
             if (empty($key) ) :
                 $key      = $this->generate_key();
                 $site_name  = get_bloginfo('name', 'display');
