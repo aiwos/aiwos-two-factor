@@ -510,7 +510,6 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 						*     on a monitor, and it lowers the image size.
 						*/
 						var qr = qrcode( 0, 'L' );
-						console.log(qr);
 
 						qr.addData( <?php echo wp_json_encode( $totp_url ); ?> );
 						qr.make();
