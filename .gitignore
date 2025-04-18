@@ -4,4 +4,5 @@
 /vendor/
 /dist/
 /tests/logs/
-/wordpress/
+.phpunit.result.cache
+phpstan.neon

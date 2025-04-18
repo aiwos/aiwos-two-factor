@@ -10,6 +10,7 @@
  *
  * @package Two_Factor
  * @group providers
+ * @group email
  */
 class Tests_Two_Factor_Email extends WP_UnitTestCase {
 
@@ -176,12 +177,20 @@ class Tests_Two_Factor_Email extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Verify that email validation with no user returns false.
+	 * Verify that email validation fails if user or token are missing.
 	 *
 	 * @covers Two_Factor_Email::validate_authentication
 	 */
-	public function test_validate_authentication_no_user_is_false() {
-		$this->assertFalse( $this->provider->validate_authentication( false ) );
+	public function test_validate_authentication_fails_with_missing_input() {
+		$logged_out_user = new WP_User();
+		$valid_user      = new WP_User( self::factory()->user->create() );
+
+		// User but no code.
+		$this->assertFalse( $this->provider->validate_authentication( $valid_user ) );
+
+		// Code but no user.
+		$_REQUEST['two-factor-email-code'] = $this->provider->generate_token( $valid_user->ID );
+		$this->assertFalse( $this->provider->validate_authentication( $logged_out_user ) );
 	}
 
 	/**
@@ -341,6 +350,69 @@ class Tests_Two_Factor_Email extends WP_UnitTestCase {
 			$this->provider->validate_token( $user_id, $token ),
 			'Expired tokens are invalid'
 		);
+	}
+
+	public function test_custom_token_length() {
+		$user_id = self::factory()->user->create();
+
+		$default_token = $this->provider->generate_token( $user_id );
+
+		add_filter(
+			'two_factor_email_token_length',
+			function() {
+				return 15;
+			}
+		);
+
+		$custom_token = $this->provider->generate_token( $user_id );
+
+		$this->assertNotEquals( strlen( $default_token ), strlen( $custom_token ), 'Token length is different due to filter' );
+		$this->assertEquals( 15, strlen( $custom_token ), 'Token length matches the filter value' );
+
+		remove_all_filters( 'two_factor_email_token_length' );
+	}
+
+	/**
+	 * Test the email token TTL.
+	 *
+	 * @expectedDeprecated two_factor_token_ttl
+	 */
+	public function test_email_token_ttl() {
+		$this->assertEquals(
+			15 * MINUTE_IN_SECONDS,
+			$this->provider->user_token_ttl( 123 ),
+			'The email token matches the default TTL'
+		);
+
+		add_filter(
+			'two_factor_email_token_ttl',
+			function() {
+				return 42;
+			}
+		);
+
+		$this->assertEquals(
+			42,
+			$this->provider->user_token_ttl( 123 ),
+			'The email token ttl can be filtered'
+		);
+
+		remove_all_filters( 'two_factor_email_token_ttl' );
+
+		add_filter(
+			'two_factor_token_ttl',
+			function() {
+				return 66;
+			}
+		);
+
+		$this->assertEquals(
+			66,
+			$this->provider->user_token_ttl( 123 ),
+			'The email token matches can be filtered with the deprecated filter'
+		);
+
+		remove_all_filters( 'two_factor_token_ttl' );
 	}
 
 }

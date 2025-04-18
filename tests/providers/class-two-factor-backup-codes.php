@@ -10,6 +10,7 @@
  *
  * @package Two_Factor
  * @group providers
+ * @group backup-codes
  */
 class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 
@@ -27,6 +28,7 @@ class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+
 		$this->provider = Two_Factor_Backup_Codes::get_instance();
 	}
 
@@ -45,7 +47,7 @@ class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 	 * @covers Two_Factor_Backup_Codes::get_label
 	 */
 	public function test_get_label() {
-		$this->assertStringContainsString( 'Backup Verification Codes', $this->provider->get_label() );
+		$this->assertStringContainsString( 'Recovery Codes', $this->provider->get_label() );
 	}
 
 	/**
@@ -58,7 +60,7 @@ class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 		$this->provider->authentication_page( false );
 		$contents = ob_get_clean();
 
-		$this->assertStringContainsString( 'Enter a backup verification code.', $contents );
+		$this->assertStringContainsString( 'Enter a recovery code.', $contents );
 	}
 
 	/**
@@ -67,13 +69,17 @@ class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 	 * @covers Two_Factor_Backup_Codes::validate_authentication
 	 */
 	public function test_validate_authentication() {
-		$user                            = new WP_User( self::factory()->user->create() );
-		$code                            = $this->provider->generate_codes( $user, array( 'number' => 1 ) );
-		$_POST['two-factor-backup-code'] = $code[0];
+		$user = new WP_User( self::factory()->user->create() );
+		$code = $this->provider->generate_codes( $user, array( 'number' => 1 ) );
 
+		// Verify authentication correctly fails without a set code.
+		$this->assertFalse( $this->provider->validate_authentication( $user ) );
+
+		// Set the code and verify it passes.
+		$_REQUEST['two-factor-backup-code'] = $code[0];
 		$this->assertTrue( $this->provider->validate_authentication( $user ) );
 
-		unset( $_POST['two-factor-backup-code'] );
+		unset( $_REQUEST['two-factor-backup-code'] );
 	}
 
 	/**
@@ -152,7 +158,6 @@ class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 	 */
 	public function test_user_options() {
 		$user  = new WP_User( self::factory()->user->create() );
-		$nonce = wp_create_nonce( 'two-factor-backup-codes-generate-json-' . $user->ID );
 
 		ob_start();
 		$this->provider->user_options( $user );
@@ -160,8 +165,7 @@ class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<p id="two-factor-backup-codes">', $buffer );
 		$this->assertStringContainsString( '<div class="two-factor-backup-codes-wrapper" style="display:none;">', $buffer );
-		$this->assertStringContainsString( "user_id: '{$user->ID}'", $buffer );
-		$this->assertStringContainsString( "nonce: '{$nonce}'", $buffer );
+		$this->assertStringContainsString( "user_id: {$user->ID}", $buffer );
 	}
 
 	/**
@@ -191,4 +195,24 @@ class Tests_Two_Factor_Backup_Codes extends WP_UnitTestCase {
 		$this->assertEquals( 1, $this->provider->codes_remaining_for_user( $user ) );
 	}
 
+	public function test_backup_code_length_filter() {
+		$user = new WP_User( self::factory()->user->create() );
+
+		$code_default = $this->provider->generate_codes( $user, array( 'number' => 1 ) );
+
+		add_filter(
+			'two_factor_backup_code_length',
+			function() {
+				return 7;
+			}
+		);
+
+		$code_custom_length = $this->provider->generate_codes( $user, array( 'number' => 1 ) );
+
+		$this->assertNotEquals( strlen( $code_custom_length[0] ), strlen( $code_default[0] ), 'Backup code length can be adjusted via filter' );
+
+		$this->assertEquals( 7, strlen( $code_custom_length[0] ), 'Backup code length matches the filtered length' );
+
+		remove_all_filters( 'two_factor_backup_code_length' );
+	}
 }
