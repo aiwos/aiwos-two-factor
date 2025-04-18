@@ -10,12 +10,20 @@
  */
 class Two_Factor_Totp extends Two_Factor_Provider {
 
+
 	/**
 	 * The user meta key for the TOTP Secret key.
 	 *
 	 * @var string
 	 */
 	const SECRET_META_KEY = '_two_factor_totp_key';
+
+	/**
+	* The user meta token key.
+	*
+	* @var string
+	*/
+	const NOTICES_META_KEY = '_two_factor_totp_notices';
 
 	/**
 	 * The user meta key for the last successful TOTP token timestamp logged in with.
@@ -48,7 +56,192 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'two_factor_user_options_' . __CLASS__, array( $this, 'user_two_factor_options' ) );
 
+		add_shortcode( 'two-factor-set-totp', array( $this, 'topt_shortcode' ) );
+
+		// Save options if shortcode form is submitted.
+		if ( isset( $_REQUEST['_nonce_user_two_factor_totp_options_shortcode'] ) ) {
+			$this->user_two_factor_options_update_shortcode( get_current_user_id() );
+		}
+
 		parent::__construct();
+	}
+
+	/**
+	 * Output for the two-factor-set-topt shortcode.
+	 *
+	 * @param array $atts Array of attributes.
+	 *
+	 * @return string
+	 */
+	public function topt_shortcode( $atts ) {
+		$user = wp_get_current_user();
+
+		ob_start();
+		?>
+		<div id="two-factor-totp-options">
+		<?php
+		if ( $user->exists() ) {
+
+			$key = $this->get_user_totp_key( $user->ID );
+
+			wp_enqueue_script( 'two-factor-qr-code-generator' );
+			wp_enqueue_script( 'wp-api-request' );
+			wp_enqueue_script( 'jquery' );
+
+			if ( empty( $key ) ) :
+				$key        = $this->generate_key();
+				$site_name  = get_bloginfo( 'name', 'display' );
+				$totp_url   = $this->generate_qr_code_url( $user, $key );
+				$totp_title = apply_filters( 'two_factor_totp_title', $site_name . ':' . $user->user_login, $user );
+				?>
+				<form>
+				<?php
+				wp_nonce_field( 'user_two_factor_totp_options_shortcode', '_nonce_user_two_factor_totp_options_shortcode', false );
+				?>
+				<p>
+				<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor' ); ?>
+			</p>
+			<p id="two-factor-qr-code">
+				<a href="<?php echo $totp_url; ?>">
+					Loading...
+					<img src="<?php echo esc_url( admin_url( 'images/spinner.gif' ) ); ?>" alt="" />
+				</a>
+			</p>
+
+			<style>
+				#two-factor-qr-code {
+					/* The size of the image will change based on the length of the URL inside it. */
+					min-width: 205px;
+					min-height: 205px;
+				}
+			</style>
+
+			<script>
+				(function(){
+					var qr_generator = function() {
+						/*
+						* 0 = Automatically select the version, to avoid going over the limit of URL
+						*     length.
+						* L = Least amount of error correction, because it's not needed when scanning
+						*     on a monitor, and it lowers the image size.
+						*/
+						var qr = qrcode( 0, 'L' );
+
+						qr.addData( <?php echo wp_json_encode( $totp_url ); ?> );
+						qr.make();
+
+						document.querySelector( '#two-factor-qr-code a' ).innerHTML = qr.createSvgTag( 5 );
+
+						// For accessibility, markup the SVG with a title and role.
+						var svg = document.querySelector( '#two-factor-qr-code a svg' ),
+							title = document.createElement( 'title' );
+
+						svg.role = 'image';
+						svg.ariaLabel = <?php echo wp_json_encode( __( 'Authenticator App QR Code', 'two-factor' ) ); ?>;
+						title.innerText = svg.ariaLabel;
+						svg.appendChild( title );
+					};
+
+					// Run now if the document is loaded, otherwise on DOMContentLoaded.
+					if ( document.readyState === 'complete' ) {
+						qr_generator();
+					} else {
+						window.addEventListener( 'DOMContentLoaded', qr_generator );
+					}
+				})();
+			</script>
+				<p>
+					<code><?php echo esc_html( $key ); ?></code>
+				</p>
+				<p>
+					<input type="hidden" name="two-factor-totp-key" value="<?php echo esc_attr( $key ); ?>" />
+					<label for="two-factor-totp-authcode">
+				<?php esc_html_e( 'Authentication Code:', 'two-factor' ); ?>
+						<input type="tel" name="two-factor-totp-authcode" id="two-factor-totp-authcode" class="input" value="" size="20" pattern="[0-9]*" />
+					</label>
+					<input type="submit" class="button" name="two-factor-totp-submit" value="<?php esc_attr_e( 'Submit', 'two-factor' ); ?>" />
+				</p>
+				</form>
+				<?php else : ?>
+				<p class="success">
+					<?php esc_html_e( 'Secret key is configured and registered. It is not possible to view it again for security reasons.', 'two-factor' ); ?>
+				</p>
+				<?php endif; ?>
+			</div>
+			<?php
+		} else {
+			?>
+			<p class="error">
+			<?php esc_html_e( 'Login to set up your Time-based One-Time Password.', 'two-factor' ); ?>
+			</p>
+			<?php
+		}
+
+		$content = ob_get_contents();
+		ob_end_clean();
+
+		return $content;
+	}
+
+	/**
+	 * Save the options after submitting the shortcode totp form. Enables the totp provider and sets it as primary provider.
+	 *
+	 * @param integer $user_id The user ID whose options are being updated.
+	 *
+	 * @return void
+	 */
+	public function user_two_factor_options_update_shortcode( $user_id ) {
+		$notices = array();
+		$errors  = array();
+		if ( isset( $_REQUEST['_nonce_user_two_factor_totp_options_shortcode'] ) ) {
+			if ( check_admin_referer( 'user_two_factor_totp_options_shortcode', '_nonce_user_two_factor_totp_options_shortcode' ) ) {
+
+				// Validate and store a new secret key.
+				if ( ! empty( $_REQUEST['two-factor-totp-authcode'] ) && ! empty( $_REQUEST['two-factor-totp-key'] ) ) {
+					// Don't use filter_input() because we can't mock it during tests for now.
+					$authcode = filter_var( sanitize_text_field( wp_unslash( $_REQUEST['two-factor-totp-authcode'] ) ), FILTER_SANITIZE_NUMBER_INT );
+					$key      = sanitize_text_field( wp_unslash( $_REQUEST['two-factor-totp-key'] ) );
+
+					if ( $this->is_valid_key( $key ) ) {
+						if ( $this->is_valid_authcode( $key, $authcode ) ) {
+							if ( ! $this->set_user_totp_key( $user_id, $key ) ) {
+									$errors[] = __( 'Unable to save Two Factor Authentication code. Please re-scan the QR code and enter the code provided by your application.', 'two-factor' );
+							} else {
+
+								$enabled_providers = get_user_meta( $user_id, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY, true );
+								if ( empty( $enabled_providers ) ) {
+										$enabled_providers = array();
+								}
+
+								$new_provider = get_class( $this );
+
+								// Enable totp if not yet enabled.
+								if ( ! in_array( $new_provider, $enabled_providers, true ) ) {
+									$enabled_providers[] = $new_provider;
+									update_user_meta( $user_id, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY, $enabled_providers );
+								}
+
+								// Set as primary.
+								update_user_meta( $user_id, Two_Factor_Core::PROVIDER_USER_META_KEY, $new_provider );
+
+							}
+						} else {
+							$errors[] = __( 'Invalid Two Factor Authentication code.', 'two-factor' );
+						}
+					} else {
+						$errors[] = __( 'Invalid Two Factor Authentication secret key.', 'two-factor' );
+					}
+				}
+
+				if ( ! empty( $errors ) ) {
+					$notices['error'] = $errors;
+				}
+
+				if ( ! empty( $notices ) ) {
+					update_user_meta( $user_id, self::NOTICES_META_KEY, $notices );
+				}
+			}
+		}
 	}
 
 	/**
@@ -64,7 +257,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 				array(
 					'methods'             => WP_REST_Server::DELETABLE,
 					'callback'            => array( $this, 'rest_delete_totp' ),
-					'permission_callback' => function( $request ) {
+					'permission_callback' => function ( $request ) {
 						return Two_Factor_Core::rest_api_can_edit_user_and_update_two_factor_options( $request['user_id'] );
 					},
 					'args'                => array(
@@ -77,20 +270,20 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'rest_setup_totp' ),
-					'permission_callback' => function( $request ) {
+					'permission_callback' => function ( $request ) {
 						return Two_Factor_Core::rest_api_can_edit_user_and_update_two_factor_options( $request['user_id'] );
 					},
 					'args'                => array(
-						'user_id' => array(
+						'user_id'         => array(
 							'required' => true,
 							'type'     => 'integer',
 						),
-						'key'     => array(
+						'key'             => array(
 							'type'              => 'string',
 							'default'           => '',
 							'validate_callback' => null, // Note: validation handled in ::rest_setup_totp().
 						),
-						'code'    => array(
+						'code'            => array(
 							'type'              => 'string',
 							'default'           => '',
 							'validate_callback' => null, // Note: validation handled in ::rest_setup_totp().
@@ -142,7 +335,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	/**
 	 * Rest API endpoint for handling deactivation of TOTP.
 	 *
-	 * @param WP_REST_Request $request The Rest Request object.
+	 * @param  WP_REST_Request $request The Rest Request object.
 	 * @return array Success array.
 	 */
 	public function rest_delete_totp( $request ) {
@@ -159,16 +352,16 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		$this->user_two_factor_options( $user );
 		$html = ob_get_clean();
 
-		return [
+		return array(
 			'success' => true,
 			'html'    => $html,
-		];
+		);
 	}
 
 	/**
 	 * REST API endpoint for setting up TOTP.
 	 *
-	 * @param WP_REST_Request $request The Rest Request object.
+	 * @param  WP_REST_Request $request The Rest Request object.
 	 * @return WP_Error|array Array of data on success, WP_Error on error.
 	 */
 	public function rest_setup_totp( $request ) {
@@ -198,10 +391,10 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		$this->user_two_factor_options( $user );
 		$html = ob_get_clean();
 
-		return [
+		return array(
 			'success' => true,
 			'html'    => $html,
-		];
+		);
 	}
 
 	/**
@@ -220,7 +413,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		 *
 		 * Must follow the TOTP format for a "issuer". Do not URL Encode.
 		 *
-		 * @see https://github.com/google/google-authenticator/wiki/Key-Uri-Format#issuer
+		 * @see   https://github.com/google/google-authenticator/wiki/Key-Uri-Format#issuer
 		 * @param string $issuer The issuer for TOTP.
 		 */
 		$issuer = apply_filters( 'two_factor_totp_issuer', $issuer );
@@ -230,7 +423,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		 *
 		 * Must follow the TOTP format for a "label". Do not URL Encode.
 		 *
-		 * @see https://github.com/google/google-authenticator/wiki/Key-Uri-Format#label
+		 * @see   https://github.com/google/google-authenticator/wiki/Key-Uri-Format#label
 		 * @param string  $totp_title The label for the TOTP.
 		 * @param WP_User $user       The User object.
 		 * @param string  $issuer     The issuer of the TOTP. This should be the prefix of the result.
@@ -250,7 +443,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		 *
 		 * Must follow the TOTP format. Do not URL Encode.
 		 *
-		 * @see https://github.com/google/google-authenticator/wiki/Key-Uri-Format
+		 * @see   https://github.com/google/google-authenticator/wiki/Key-Uri-Format
 		 * @param string  $totp_url The TOTP URL.
 		 * @param WP_User $user     The user object.
 		 */
@@ -263,7 +456,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	/**
 	 * Display TOTP options on the user settings page.
 	 *
-	 * @param WP_User $user The current user being edited.
+	 * @param  WP_User $user The current user being edited.
 	 * @return void
 	 *
 	 * @codeCoverageIgnore
@@ -290,7 +483,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 			?>
 
 			<p>
-				<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor' ); ?>
+			<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor' ); ?>
 			</p>
 			<p id="two-factor-qr-code">
 				<a href="<?php echo $totp_url; ?>">
@@ -348,14 +541,14 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 			<p>
 				<input type="hidden" id="two-factor-totp-key" name="two-factor-totp-key" value="<?php echo esc_attr( $key ); ?>" />
 				<label for="two-factor-totp-authcode">
-					<?php esc_html_e( 'Authentication Code:', 'two-factor' ); ?>
-					<?php
-						/* translators: Example auth code. */
-						$placeholder = sprintf( __( 'eg. %s', 'two-factor' ), '123456' );
-					?>
+			<?php esc_html_e( 'Authentication Code:', 'two-factor' ); ?>
+			<?php
+			/* translators: Example auth code. */
+			$placeholder = sprintf( __( 'eg. %s', 'two-factor' ), '123456' );
+			?>
 					<input type="text" inputmode="numeric" name="two-factor-totp-authcode" id="two-factor-totp-authcode" class="input" value="" size="20" pattern="[0-9 ]*" placeholder="<?php echo esc_attr( $placeholder ); ?>" autocomplete="off" />
 				</label>
-				<input type="submit" class="button totp-submit" name="two-factor-totp-submit" value="<?php esc_attr_e( 'Verify', 'two-factor' ); ?>" />
+				<input type="submit" class="button totp-submit" name="two-factor-totp-submit" value="<?php esc_attr_e( 'Submit', 'two-factor' ); ?>" />
 			</p>
 
 			<script>
@@ -403,11 +596,11 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 
 		<?php else : ?>
 			<p class="success">
-				<?php esc_html_e( 'An authenticator app is currently configured. You will need to re-scan the QR code on all devices if reset.', 'two-factor' ); ?>
+			<?php esc_html_e( 'An authenticator app is currently configured. You will need to re-scan the QR code on all devices if reset.', 'two-factor' ); ?>
 			</p>
 			<p>
 				<button type="button" class="button button-secondary reset-totp-key hide-if-no-js">
-					<?php esc_html_e( 'Reset authenticator app', 'two-factor' ); ?>
+			<?php esc_html_e( 'Reset authenticator app', 'two-factor' ); ?>
 				</button>
 				<script>
 					( function( $ ) {
@@ -436,7 +629,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	/**
 	 * Get the TOTP secret key for a user.
 	 *
-	 * @param  int $user_id User ID.
+	 * @param int $user_id User ID.
 	 *
 	 * @return string
 	 */
@@ -448,7 +641,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	 * Set the TOTP secret key for a user.
 	 *
 	 * @param int    $user_id User ID.
-	 * @param string $key TOTP secret key.
+	 * @param string $key     TOTP secret key.
 	 *
 	 * @return boolean If the key was stored successfully.
 	 */
@@ -459,7 +652,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	/**
 	 * Delete the TOTP secret key for a user.
 	 *
-	 * @param  int $user_id User ID.
+	 * @param int $user_id User ID.
 	 *
 	 * @return boolean If the key was deleted successfully.
 	 */
@@ -471,7 +664,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	/**
 	 * Check if the TOTP secret key has a proper format.
 	 *
-	 * @param  string $key TOTP secret key.
+	 * @param string $key TOTP secret key.
 	 *
 	 * @return boolean
 	 */
@@ -560,7 +753,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		 * so the default of 4 allows codes that are two minutes to either side of server time
 		 *
 		 * @deprecated 0.7.0 Use {@see 'two_factor_totp_time_step_allowance'} instead.
-		 * @param int $max_ticks Max ticks of time correction to allow. Default 4.
+		 * @param      int $max_ticks Max ticks of time correction to allow. Default 4.
 		 */
 		$max_ticks = apply_filters_deprecated( 'two-factor-totp-time-step-allowance', array( self::DEFAULT_TIME_STEP_ALLOWANCE ), '0.7.0', 'two_factor_totp_time_step_allowance' );
 
@@ -615,9 +808,9 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 			$higher  = ( $value & $highmap ) >> 32;
 		} else {
 			/*
-			 * 32bit PHP can't shift 32 bits like that, so we have to assume 0 for the higher
-			 * and not pack anything beyond it's limits.
-			 */
+			* 32bit PHP can't shift 32 bits like that, so we have to assume 0 for the higher
+			* and not pack anything beyond it's limits.
+			*/
 			$higher = 0;
 		}
 
@@ -652,11 +845,11 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		$offset = ord( $hash[19] ) & 0xf;
 
 		$code = (
-				( ( ord( $hash[ $offset + 0 ] ) & 0x7f ) << 24 ) |
-				( ( ord( $hash[ $offset + 1 ] ) & 0xff ) << 16 ) |
-				( ( ord( $hash[ $offset + 2 ] ) & 0xff ) << 8 ) |
-				( ord( $hash[ $offset + 3 ] ) & 0xff )
-			) % pow( 10, $digits );
+		( ( ord( $hash[ $offset + 0 ] ) & 0x7f ) << 24 ) |
+		( ( ord( $hash[ $offset + 1 ] ) & 0xff ) << 16 ) |
+		( ( ord( $hash[ $offset + 2 ] ) & 0xff ) << 8 ) |
+		( ord( $hash[ $offset + 3 ] ) & 0xff )
+		) % pow( 10, $digits );
 
 		return str_pad( $code, $digits, '0', STR_PAD_LEFT );
 	}
@@ -717,10 +910,10 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	 * @codeCoverageIgnore
 	 */
 	public function authentication_page( $user ) {
-		require_once ABSPATH . '/wp-admin/includes/template.php';
+		include_once ABSPATH . '/wp-admin/includes/template.php';
 		?>
 		<p class="two-factor-prompt">
-			<?php esc_html_e( 'Enter the code generated by your authenticator app.', 'two-factor' ); ?>
+		<?php esc_html_e( 'Enter the code generated by your authenticator app.', 'two-factor' ); ?>
 		</p>
 		<p>
 			<label for="authcode"><?php esc_html_e( 'Authentication Code:', 'two-factor' ); ?></label>
@@ -736,7 +929,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 			}, 200);
 		</script>
 		<?php
-		submit_button( __( 'Verify', 'two-factor' ) );
+		submit_button( __( 'Authenticate', 'two-factor' ) );
 	}
 
 	/**
