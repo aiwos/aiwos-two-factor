@@ -1,6 +1,6 @@
 name: Deploy
 
-# Run deploy only on tag and master builds.
+# Run deploy only on tag and master builds.t
 on:
   push:
     branches:
