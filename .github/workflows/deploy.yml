@@ -37,9 +37,9 @@ jobs:
 
       - name: Copy necessary files
         run: |
-          mkdir -p dist/includes
+          mkdir -p dist/includes/qrcode-egenerator
           rsync -a --exclude-from='.distignore' ./ dist/
-          cp node_modules/qrcode-generator/qrcode.js dist/includes
+          cp node_modules/qrcode-generator/qrcode.js dist/includes/qrcode-generator/
         
       - name: Remove empty directories from dist
         run: find dist -type d -empty -delete
