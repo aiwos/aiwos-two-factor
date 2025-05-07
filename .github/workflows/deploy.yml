@@ -37,7 +37,7 @@ jobs:
 
       - name: Copy necessary files
         run: |
-          mkdir -p dist/includes/qrcode-egenerator
+          mkdir -p dist/includes/qrcode-generator
           rsync -a --exclude-from='.distignore' ./ dist/
           cp node_modules/qrcode-generator/qrcode.js dist/includes/qrcode-generator/
         
