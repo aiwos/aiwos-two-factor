@@ -12,7 +12,7 @@ jobs:
 
   deploy:
     name: Create release asset
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -40,6 +40,9 @@ jobs:
           mkdir -p dist/includes
           rsync -a --exclude-from='.distignore' ./ dist/
           cp node_modules/qrcode-generator/qrcode.js dist/includes
+        
+      - name: Remove empty directories from dist
+        run: find dist -type d -empty -delete
 
       - name: Prepare for artifact creation
         run: |
