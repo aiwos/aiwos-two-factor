@@ -54,7 +54,7 @@ jobs:
           args: zip -X -r build/two-factor-${{ github.event.release.tag_name }}.zip two-factor -x *.git* *node_modules/\* .* "*/\.*" *CODE_OF_CONDUCT.md *readme-dev.md *.phar *appsero.json *CONTRIBUTING.md *ISSUE_TEMPLATE.md *PULL_REQUEST_TEMPLATE.md *.dist *.neon *composer* *package* *phpunit* *webpack* *tests**
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: two-factor
           path: build/two-factor-${{ github.event.release.tag_name }}.zip
