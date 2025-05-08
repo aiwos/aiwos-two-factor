@@ -1,20 +1,12 @@
 <?php
 /**
- * Two Factor
- *
- * @package     Two_Factor
- * @author      Plugin Contributors
- * @copyright   2020 Plugin Contributors
- * @license     GPL-2.0-or-later
- *
- * @wordpress-plugin
  * Plugin Name: Two Factor (CUSTOMIZED, DO NOT UPDATE)
  * Plugin URI: https://wordpress.org/plugins/two-factor/
  * Description: DO NOT UPDATE, featuring internally generated QR codes and a frontend TOTP activation.
  * Author: Plugin Contributors
  * Version: 0.13.0.1
  * Author URI: https://github.com/wordpress/two-factor/graphs/contributors
- * Network: True
+ * Network: true
  * Text Domain: two-factor
  */
 
