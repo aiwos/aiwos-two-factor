@@ -32,17 +32,10 @@ jobs:
       - name: Install NPM dependencies
         run: npm install
 
-      - name: Clean dist directory
-        run: rm -rf dist
-
-      - name: Copy necessary files
+      - name: Copy qrcode.js to includes/qrcode-generator
         run: |
-          mkdir -p dist/includes/qrcode-generator
-          rsync -a --exclude-from='.distignore' ./ dist/
-          cp node_modules/qrcode-generator/qrcode.js dist/includes/qrcode-generator/
-        
-      - name: Remove empty directories from dist
-        run: find dist -type d -empty -delete
+          mkdir -p includes/qrcode-generator
+          cp node_modules/qrcode-generator/qrcode.js includes/qrcode-generator/
 
       - name: Prepare for artifact creation
         run: |
