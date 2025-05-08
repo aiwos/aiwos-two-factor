@@ -41,7 +41,7 @@ jobs:
         run: |
              rm -rf node_modules
              mkdir two-factor
-             rsync -a ./ ./two-factor --exclude two-factor --exclude vendor
+             rsync -a ./ ./two-factor --exclude two-factor --exclude vendor --exclude includes/BaconQrCode
              mkdir build
 
       - name: Create artifact
