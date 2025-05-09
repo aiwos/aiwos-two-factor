@@ -874,21 +874,6 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	}
 
 	/**
-	 * Display the QR code.
-	 */
-	public static function qr( ) {
-		$uri = $_GET['uri'];
-
-		$renderer = new \TwoFactor\BaconQrCode\Renderer\Image\Svg();
-		$renderer->setHeight(300);
-		$renderer->setWidth(300);
-		$writer = new \TwoFactor\BaconQrCode\Writer($renderer);
-		header('Content-Type: image/svg+xml');
-		echo $writer->writeString($uri);
-		exit(0);
-	}
-
-	/**
 	 * Whether this Two Factor provider is configured and available for the user specified.
 	 *
 	 * @param WP_User $user WP_User object of the logged-in user.

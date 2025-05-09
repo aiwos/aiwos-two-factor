@@ -3,23 +3,19 @@
  * Two Factor
  *
  * @package     Two_Factor
- * @author      WordPress.org Contributors
+ * @author      Plugin Contributors
  * @copyright   2020 Plugin Contributors
  * @license     GPL-2.0-or-later
  *
  * @wordpress-plugin
- * Plugin Name:       Two Factor
- * Plugin URI:        https://wordpress.org/plugins/two-factor/
- * Description:       Enable Two-Factor Authentication using time-based one-time passwords, Universal 2nd Factor (FIDO U2F, YubiKey), email, and backup verification codes.
- * Version:           0.13.0.1
- * Requires at least: 6.3
- * Requires PHP:      7.2
- * Author:            WordPress.org Contributors
- * Author URI:        https://github.com/wordpress/two-factor/graphs/contributors
- * License:           GPL-2.0-or-later
- * License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
- * Text Domain:       two-factor
- * Network:           True
+ * Plugin Name: Two Factor (CUSTOMIZED, DO NOT UPDATE)
+ * Plugin URI: https://wordpress.org/plugins/two-factor/
+ * Description: DO NOT UPDATE, featuring internally generated QR codes and a frontend TOTP activation.
+ * Author: Plugin Contributors
+ * Version: 0.13.0.2
+ * Author URI: https://github.com/wordpress/two-factor/graphs/contributors
+ * Network: True
+ * Text Domain: two-factor
  */
 
 /**
@@ -30,7 +26,7 @@ define( 'TWO_FACTOR_DIR', plugin_dir_path( __FILE__ ) );
 /**
  * Version of the plugin.
  */
-define( 'TWO_FACTOR_VERSION', '0.13.0.1' );
+define( 'TWO_FACTOR_VERSION', '0.13.0.2' );
 
 /**
  * Include the base class here, so that other plugins can also extend it.
