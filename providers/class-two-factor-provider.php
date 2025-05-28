@@ -59,7 +59,7 @@ abstract class Two_Factor_Provider {
 	public function get_alternative_provider_label() {
 		return sprintf(
 			/* translators: the two factor provider name */
-			__( 'Use %s', 'two-factor' ),
+			__( 'Use %s', 'aiwos-two-factor' ),
 			$this->get_label()
 		);
 	}

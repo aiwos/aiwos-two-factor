@@ -29,9 +29,9 @@ class Two_Factor_FIDO_U2F_Admin_List_Table extends WP_List_Table {
 	 */
 	public function get_columns() {
 		return array(
-			'name'      => wp_strip_all_tags( __( 'Name', 'two-factor' ) ),
-			'added'     => wp_strip_all_tags( __( 'Added', 'two-factor' ) ),
-			'last_used' => wp_strip_all_tags( __( 'Last Used', 'two-factor' ) ),
+			'name'      => wp_strip_all_tags( __( 'Name', 'aiwos-two-factor' ) ),
+			'added'     => wp_strip_all_tags( __( 'Added', 'aiwos-two-factor' ) ),
+			'last_used' => wp_strip_all_tags( __( 'Last Used', 'aiwos-two-factor' ) ),
 		);
 	}
 
@@ -122,7 +122,7 @@ class Two_Factor_FIDO_U2F_Admin_List_Table extends WP_List_Table {
 						<fieldset>
 							<div class="inline-edit-col">
 								<label>
-									<span class="title"><?php esc_html_e( 'Name', 'two-factor' ); ?></span>
+									<span class="title"><?php esc_html_e( 'Name', 'aiwos-two-factor' ); ?></span>
 									<span class="input-text-wrap"><input type="text" name="name" class="ptitle" value="" /></span>
 								</label>
 							</div>
@@ -144,8 +144,8 @@ class Two_Factor_FIDO_U2F_Admin_List_Table extends WP_List_Table {
 						}
 						?>
 						<p class="inline-edit-save submit">
-							<a href="#inline-edit" class="cancel button-secondary alignleft"><?php esc_html_e( 'Cancel', 'two-factor' ); ?></a>
-							<a href="#inline-edit" class="save button-primary alignright"><?php esc_html_e( 'Update', 'two-factor' ); ?></a>
+							<a href="#inline-edit" class="cancel button-secondary alignleft"><?php esc_html_e( 'Cancel', 'aiwos-two-factor' ); ?></a>
+							<a href="#inline-edit" class="save button-primary alignright"><?php esc_html_e( 'Update', 'aiwos-two-factor' ); ?></a>
 							<span class="spinner"></span>
 							<span class="error" style="display:none;"></span>
 							<?php wp_nonce_field( 'keyinlineeditnonce', '_inline_edit', false ); ?>

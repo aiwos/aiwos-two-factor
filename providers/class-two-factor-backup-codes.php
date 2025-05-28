@@ -100,7 +100,7 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 					echo wp_kses(
 						sprintf(
 						/* translators: %s: URL for code regeneration */
-							__( 'Two-Factor: You are out of recovery codes and need to <a href="%s">regenerate!</a>', 'two-factor' ),
+							__( 'Two-Factor: You are out of recovery codes and need to <a href="%s">regenerate!</a>', 'aiwos-two-factor' ),
 							esc_url( get_edit_user_link( $user->ID ) . '#two-factor-backup-codes' )
 						),
 						array( 'a' => array( 'href' => true ) )
@@ -118,7 +118,7 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 	 * @since 0.1-dev
 	 */
 	public function get_label() {
-		return _x( 'Recovery Codes', 'Provider Label', 'two-factor' );
+		return _x( 'Recovery Codes', 'Provider Label', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -127,7 +127,7 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 	 * @since 0.9.0
 	 */
 	public function get_alternative_provider_label() {
-		return __( 'Use a recovery code', 'two-factor' );
+		return __( 'Use a recovery code', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -165,7 +165,7 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 				echo esc_html(
 					sprintf(
 						/* translators: %s: count */
-						_n( '%s unused code remaining, each recovery code can only be used once.', '%s unused codes remaining, each recovery code can only be used once.', $count, 'two-factor' ),
+						_n( '%s unused code remaining, each recovery code can only be used once.', '%s unused codes remaining, each recovery code can only be used once.', $count, 'aiwos-two-factor' ),
 						$count
 					)
 				);
@@ -173,15 +173,15 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 			</p>
 			<p>
 				<button type="button" class="button button-two-factor-backup-codes-generate button-secondary hide-if-no-js">
-					<?php esc_html_e( 'Generate new recovery codes', 'two-factor' ); ?>
+					<?php esc_html_e( 'Generate new recovery codes', 'aiwos-two-factor' ); ?>
 				</button>
 			</p>
 		</p>
 		<div class="two-factor-backup-codes-wrapper" style="display:none;">
 			<ol class="two-factor-backup-codes-unused-codes"></ol>
-			<p class="description"><?php esc_html_e( 'Write these down! Once you navigate away from this page, you will not be able to view these codes again.', 'two-factor' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Write these down! Once you navigate away from this page, you will not be able to view these codes again.', 'aiwos-two-factor' ); ?></p>
 			<p>
-				<a class="button button-two-factor-backup-codes-download button-secondary hide-if-no-js" href="javascript:void(0);" id="two-factor-backup-codes-download-link" download="two-factor-backup-codes.txt"><?php esc_html_e( 'Download Codes', 'two-factor' ); ?></a>
+				<a class="button button-two-factor-backup-codes-download button-secondary hide-if-no-js" href="javascript:void(0);" id="two-factor-backup-codes-download-link" download="two-factor-backup-codes.txt"><?php esc_html_e( 'Download Codes', 'aiwos-two-factor' ); ?></a>
 			<p>
 		</div>
 		<script type="text/javascript">
@@ -293,7 +293,7 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 		$count = self::codes_remaining_for_user( $user );
 		$title = sprintf(
 			/* translators: %s: the site's domain */
-			__( 'Two-Factor Recovery Codes for %s', 'two-factor' ),
+			__( 'Two-Factor Recovery Codes for %s', 'aiwos-two-factor' ),
 			home_url( '/' )
 		);
 
@@ -309,11 +309,11 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 
 		$i18n = array(
 			/* translators: %s: count */
-			'count' => esc_html( sprintf( _n( '%s unused code remaining, each recovery code can only be used once.', '%s unused codes remaining, each recovery code can only be used once.', $count, 'two-factor' ), $count ) ),
+			'count' => esc_html( sprintf( _n( '%s unused code remaining, each recovery code can only be used once.', '%s unused codes remaining, each recovery code can only be used once.', $count, 'aiwos-two-factor' ), $count ) ),
 		);
 
 		if ( $request->get_param( 'enable_provider' ) && ! Two_Factor_Core::enable_provider_for_user( $user_id, 'Two_Factor_Backup_Codes' ) ) {
-			return new WP_Error( 'db_error', __( 'Unable to enable recovery codes for this user.', 'two-factor' ), array( 'status' => 500 ) );
+			return new WP_Error( 'db_error', __( 'Unable to enable recovery codes for this user.', 'aiwos-two-factor' ), array( 'status' => 500 ) );
 		}
 
 		return array(
@@ -352,13 +352,13 @@ class Two_Factor_Backup_Codes extends Two_Factor_Provider {
 		$code_placeholder = str_repeat( 'X', $code_length );
 
 		?>
-		<p class="two-factor-prompt"><?php esc_html_e( 'Enter a recovery code.', 'two-factor' ); ?></p>
+		<p class="two-factor-prompt"><?php esc_html_e( 'Enter a recovery code.', 'aiwos-two-factor' ); ?></p>
 		<p>
-			<label for="authcode"><?php esc_html_e( 'Recovery Code:', 'two-factor' ); ?></label>
+			<label for="authcode"><?php esc_html_e( 'Recovery Code:', 'aiwos-two-factor' ); ?></label>
 			<input type="text" inputmode="numeric" name="two-factor-backup-code" id="authcode" class="input authcode" value="" size="20" pattern="[0-9 ]*" placeholder="<?php echo esc_attr( $code_placeholder ); ?>" data-digits="<?php echo esc_attr( $code_length ); ?>" />
 		</p>
 		<?php
-		submit_button( __( 'Verify', 'two-factor' ) );
+		submit_button( __( 'Verify', 'aiwos-two-factor' ) );
 	}
 
 	/**

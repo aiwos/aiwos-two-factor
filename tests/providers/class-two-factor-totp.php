@@ -74,7 +74,7 @@ class Tests_Two_Factor_Totp extends WP_UnitTestCase {
 		$this->provider->user_two_factor_options( $user );
 		$content = ob_get_clean();
 
-		$this->assertStringContainsString( __( 'Authentication Code:', 'two-factor' ), $content );
+		$this->assertStringContainsString( __( 'Authentication Code:', 'aiwos-two-factor' ), $content );
 	}
 
 	/**

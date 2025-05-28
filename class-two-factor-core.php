@@ -279,7 +279,7 @@ class Two_Factor_Core {
 			trigger_error( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_trigger_error
 				sprintf(
 				/* translators: %s: version number */
-					__( 'FIDO U2F is not available because you are using PHP %s. (Requires 5.3 or greater)', 'two-factor' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					__( 'FIDO U2F is not available because you are using PHP %s. (Requires 5.3 or greater)', 'aiwos-two-factor' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					PHP_VERSION
 				)
 			);
@@ -738,7 +738,7 @@ class Two_Factor_Core {
 		if ( $user instanceof WP_User && self::is_api_request() && self::is_user_using_two_factor( $user->ID ) && ! self::is_user_api_login_enabled( $user->ID ) ) {
 			return new WP_Error(
 				'invalid_application_credentials',
-				__( 'Error: API login for user disabled.', 'two-factor' )
+				__( 'Error: API login for user disabled.', 'aiwos-two-factor' )
 			);
 		}
 
@@ -810,7 +810,7 @@ class Two_Factor_Core {
 
 		$login_nonce = self::create_login_nonce( $user->ID );
 		if ( ! $login_nonce ) {
-			wp_die( esc_html__( 'Failed to create a login nonce.', 'two-factor' ) );
+			wp_die( esc_html__( 'Failed to create a login nonce.', 'aiwos-two-factor' ) );
 		}
 
 		$redirect_to = isset( $_REQUEST['redirect_to'] ) ? $_REQUEST['redirect_to'] : admin_url();
@@ -880,7 +880,7 @@ class Two_Factor_Core {
 		$errors->add(
 			'two_factor_password_reset',
 			sprintf(
-				__( 'Your password was reset because of too many failed Two Factor attempts. You will need to <a href="%s">create a new password</a> to regain access. Please check your email for more information.', 'two-factor' ),
+				__( 'Your password was reset because of too many failed Two Factor attempts. You will need to <a href="%s">create a new password</a> to regain access. Please check your email for more information.', 'aiwos-two-factor' ),
 				esc_url( add_query_arg( 'action', 'lostpassword', wp_login_url() ) )
 			)
 		);
@@ -911,7 +911,7 @@ class Two_Factor_Core {
 	public static function login_html( $user, $login_nonce, $redirect_to, $error_msg = '', $provider = null, $action = 'validate_2fa' ) {
 		$provider = self::get_provider_for_user( $user, $provider );
 		if ( ! $provider ) {
-			wp_die( __( 'Cheatin&#8217; uh?', 'two-factor' ) );
+			wp_die( __( 'Cheatin&#8217; uh?', 'aiwos-two-factor' ) );
 		}
 
 		$provider_key        = $provider->get_key();
@@ -970,7 +970,7 @@ class Two_Factor_Core {
 			?>
 			<div class="backup-methods-wrap">
 				<p>
-					<?php esc_html_e( 'Having Problems?', 'two-factor' ); ?>
+					<?php esc_html_e( 'Having Problems?', 'aiwos-two-factor' ); ?>
 				</p>
 				<ul>
 					<?php
@@ -1346,7 +1346,7 @@ class Two_Factor_Core {
 		}
 
 		if ( ! self::current_user_can_update_two_factor_options( 'save' ) ) {
-			return new WP_Error( 'revalidation_required', __( 'Two Factor Revalidation required.', 'two-factor' ) );
+			return new WP_Error( 'revalidation_required', __( 'Two Factor Revalidation required.', 'aiwos-two-factor' ) );
 		}
 
 		return true;
@@ -1397,7 +1397,7 @@ class Two_Factor_Core {
 
 		$provider = self::get_provider_for_user( $user, $provider );
 		if ( ! $provider ) {
-			wp_die( __( 'Cheatin&#8217; uh?', 'two-factor' ) );
+			wp_die( __( 'Cheatin&#8217; uh?', 'aiwos-two-factor' ) );
 		}
 
 		// Run the provider processing.
@@ -1412,7 +1412,7 @@ class Two_Factor_Core {
 
 			$login_nonce = self::create_login_nonce( $user->ID );
 			if ( ! $login_nonce ) {
-				wp_die( esc_html__( 'Failed to create a login nonce.', 'two-factor' ) );
+				wp_die( esc_html__( 'Failed to create a login nonce.', 'aiwos-two-factor' ) );
 			}
 
 			self::login_html( $user, $login_nonce['key'], $redirect_to, $error, $provider );
@@ -1461,7 +1461,7 @@ class Two_Factor_Core {
 			if ( $customize_login ) {
 				wp_enqueue_script( 'customize-base' );
 			}
-			$message       = '<p class="message">' . __( 'You have logged in successfully.', 'two-factor' ) . '</p>';
+			$message       = '<p class="message">' . __( 'You have logged in successfully.', 'aiwos-two-factor' ) . '</p>';
 			$interim_login = 'success'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 			login_header( '', $message );
 			?>
@@ -1528,7 +1528,7 @@ class Two_Factor_Core {
 
 		$provider = self::get_provider_for_user( $user, $provider );
 		if ( ! $provider ) {
-			wp_die( __( 'Cheatin&#8217; uh?', 'two-factor' ) );
+			wp_die( __( 'Cheatin&#8217; uh?', 'aiwos-two-factor' ) );
 		}
 
 		// Run the provider processing.
@@ -1562,7 +1562,7 @@ class Two_Factor_Core {
 		$interim_login = isset( $_REQUEST['interim-login'] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited,WordPress.Security.NonceVerification.Recommended
 
 		if ( $interim_login ) {
-			$message       = '<p class="message">' . __( 'You have revalidated successfully.', 'two-factor' ) . '</p>';
+			$message       = '<p class="message">' . __( 'You have revalidated successfully.', 'aiwos-two-factor' ) . '</p>';
 			$interim_login = 'success'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 			login_header( '', $message );
 			?>
@@ -1593,7 +1593,7 @@ class Two_Factor_Core {
 		if ( ! $provider ) {
 			return new WP_Error(
 				'two_factor_provider_missing',
-				__( 'Cheatin&#8217; uh?', 'two-factor' )
+				__( 'Cheatin&#8217; uh?', 'aiwos-two-factor' )
 			);
 		}
 
@@ -1615,7 +1615,7 @@ class Two_Factor_Core {
 			return new WP_Error(
 				'two_factor_too_fast',
 				sprintf(
-					__( 'ERROR: Too many invalid verification codes, you can try again in %s. This limit protects your account against automated attacks.', 'two-factor' ),
+					__( 'ERROR: Too many invalid verification codes, you can try again in %s. This limit protects your account against automated attacks.', 'aiwos-two-factor' ),
 					human_time_diff( $last_login + $time_delay )
 				)
 			);
@@ -1638,7 +1638,7 @@ class Two_Factor_Core {
 
 			return new WP_Error(
 				'two_factor_invalid',
-				__( 'ERROR: Invalid verification code.', 'two-factor' )
+				__( 'ERROR: Invalid verification code.', 'aiwos-two-factor' )
 			);
 		}
 
@@ -1784,12 +1784,12 @@ class Two_Factor_Core {
 			sprintf(
 				'<p>%s</p>
 				<p style="margin-top: 1em;">%s</p>',
-				__( 'There have been too many failed two-factor authentication attempts, which often indicates that the password has been compromised. The password has been reset in order to protect the account.', 'two-factor' ),
-				__( 'If you are the owner of this account, please check your email for instructions on regaining access.', 'two-factor' )
+				__( 'There have been too many failed two-factor authentication attempts, which often indicates that the password has been compromised. The password has been reset in order to protect the account.', 'aiwos-two-factor' ),
+				__( 'If you are the owner of this account, please check your email for instructions on regaining access.', 'aiwos-two-factor' )
 			)
 		);
 
-		login_header( __( 'Password Reset', 'two-factor' ), '', $error );
+		login_header( __( 'Password Reset', 'aiwos-two-factor' ), '', $error );
 		login_footer();
 	}
 
@@ -1800,7 +1800,7 @@ class Two_Factor_Core {
 	 * @return array          Updated array of columns.
 	 */
 	public static function filter_manage_users_columns( array $columns ) {
-		$columns['two-factor'] = __( 'Two-Factor', 'two-factor' );
+		$columns['two-factor'] = __( 'Two-Factor', 'aiwos-two-factor' );
 		return $columns;
 	}
 
@@ -1819,7 +1819,7 @@ class Two_Factor_Core {
 		}
 
 		if ( ! self::is_user_using_two_factor( $user_id ) ) {
-			return sprintf( '<span class="dashicons-before dashicons-no-alt">%s</span>', esc_html__( 'Disabled', 'two-factor' ) );
+			return sprintf( '<span class="dashicons-before dashicons-no-alt">%s</span>', esc_html__( 'Disabled', 'aiwos-two-factor' ) );
 		} else {
 			$provider = self::get_primary_provider_for_user( $user_id );
 			return esc_html( $provider->get_label() );
@@ -1856,22 +1856,22 @@ class Two_Factor_Core {
 			);
 
 			$notices['warning two-factor-warning-revalidate-session'] = sprintf(
-				esc_html__( 'To update your Two-Factor options, you must first revalidate your session.', 'two-factor' ) .
-					' <a class="button" href="%s">' . esc_html__( 'Revalidate now', 'two-factor' ) . '</a>',
+				esc_html__( 'To update your Two-Factor options, you must first revalidate your session.', 'aiwos-two-factor' ) .
+					' <a class="button" href="%s">' . esc_html__( 'Revalidate now', 'aiwos-two-factor' ) . '</a>',
 				esc_url( $url )
 			);
 		}
 
 		if ( empty( $providers ) ) {
-			$notices['notice two-factor-notice-no-providers-supported'] = esc_html__( 'No providers are available for your account.', 'two-factor' );
+			$notices['notice two-factor-notice-no-providers-supported'] = esc_html__( 'No providers are available for your account.', 'aiwos-two-factor' );
 		}
 
 		// Suggest enabling a backup method if only one method is enabled and there are more available.
 		if ( count( $providers ) > 1 && 1 === count( $enabled_providers ) ) {
-			$notices['warning two-factor-warning-suggest-backup'] = esc_html__( 'To prevent being locked out of your account, consider enabling a backup method like Recovery Codes in case you lose access to your primary authentication method.', 'two-factor' );
+			$notices['warning two-factor-warning-suggest-backup'] = esc_html__( 'To prevent being locked out of your account, consider enabling a backup method like Recovery Codes in case you lose access to your primary authentication method.', 'aiwos-two-factor' );
 		}
 		?>
-		<h2><?php esc_html_e( 'Two-Factor Options', 'two-factor' ); ?></h2>
+		<h2><?php esc_html_e( 'Two-Factor Options', 'aiwos-two-factor' ); ?></h2>
 
 		<?php foreach ( $notices as $notice_type => $notice ) : ?>
 		<div class="<?php echo esc_attr( $notice_type ? 'notice inline notice-' . $notice_type : '' ); ?>">
@@ -1907,7 +1907,7 @@ class Two_Factor_Core {
 
 		?>
 		<p>
-			<?php esc_html_e( 'Configure a primary two-factor method along with a backup method, such as Recovery Codes, to avoid being locked out if you lose access to your primary method.', 'two-factor' ); ?>
+			<?php esc_html_e( 'Configure a primary two-factor method along with a backup method, such as Recovery Codes, to avoid being locked out if you lose access to your primary method.', 'aiwos-two-factor' ); ?>
 		</p>
 
 		<?php wp_nonce_field( 'user_two_factor_options', '_nonce_user_two_factor_options', false ); ?>
@@ -1921,7 +1921,7 @@ class Two_Factor_Core {
 					<td>
 						<label class="two-factor-method-label">
 							<input id="enabled-<?php echo esc_attr( $provider_key ); ?>" type="checkbox" name="<?php echo esc_attr( self::ENABLED_PROVIDERS_USER_META_KEY ); ?>[]" value="<?php echo esc_attr( $provider_key ); ?>" <?php checked( in_array( $provider_key, $enabled_providers, true ) ); ?> />
-							<?php echo esc_html( sprintf( __( 'Enable %s', 'two-factor' ), $object->get_label() ) ); ?>
+							<?php echo esc_html( sprintf( __( 'Enable %s', 'aiwos-two-factor' ), $object->get_label() ) ); ?>
 						</label>
 						<?php
 						/**
@@ -1945,17 +1945,17 @@ class Two_Factor_Core {
 		<table class="form-table two-factor-primary-method-table" role="presentation">
 			<tbody>
 				<tr>
-					<th><?php esc_html_e( 'Primary Method', 'two-factor' ); ?></th>
+					<th><?php esc_html_e( 'Primary Method', 'aiwos-two-factor' ); ?></th>
 					<td>
 						<select name="<?php echo esc_attr( self::PROVIDER_USER_META_KEY ); ?>">
-							<option value=""><?php echo esc_html( __( 'Default', 'two-factor' ) ); ?></option>
+							<option value=""><?php echo esc_html( __( 'Default', 'aiwos-two-factor' ) ); ?></option>
 							<?php foreach ( $providers as $provider_key => $object ) : ?>
 								<option value="<?php echo esc_attr( $provider_key ); ?>" <?php selected( $provider_key, $primary_provider_key ); ?> <?php disabled( ! in_array( $provider_key, $enabled_providers, true ) ); ?>>
 									<?php echo esc_html( $object->get_label() ); ?>
 								</option>
 							<?php endforeach; ?>
 						</select>
-						<p class="description"><?php esc_html_e( 'Select the primary method to use for two-factor authentication when signing into this site.', 'two-factor' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Select the primary method to use for two-factor authentication when signing into this site.', 'aiwos-two-factor' ); ?></p>
 					</td>
 				</tr>
 			</tbody>

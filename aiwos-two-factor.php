@@ -11,11 +11,11 @@
  * Plugin Name: Aiwos Two Factor
  * Plugin URI: https://wordpress.org/plugins/two-factor/
  * Description: DO NOT UPDATE, featuring internally generated QR codes and a frontend TOTP activation.
- * Author: Plugin Contributors
+ * Author: Aiwos, Plugin Contributors
  * Version: 0.13.0.2
  * Author URI: https://github.com/wordpress/two-factor/graphs/contributors
  * Network: True
- * Text Domain: two-factor
+ * Text Domain: aiwos-two-factor
  */
 
 /**
