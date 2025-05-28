@@ -12,7 +12,7 @@
  * Plugin URI: https://wordpress.org/plugins/two-factor/
  * Description: DO NOT UPDATE, featuring internally generated QR codes and a frontend TOTP activation.
  * Author: Aiwos, Plugin Contributors
- * Version: 0.13.0.2
+ * Version: 0.13.0.3
  * Author URI: https://github.com/wordpress/two-factor/graphs/contributors
  * Network: True
  * Text Domain: aiwos-two-factor
@@ -26,7 +26,7 @@ define( 'TWO_FACTOR_DIR', plugin_dir_path( __FILE__ ) );
 /**
  * Version of the plugin.
  */
-define( 'TWO_FACTOR_VERSION', '0.13.0.2' );
+define( 'TWO_FACTOR_VERSION', '0.13.0.3' );
 
 /**
  * Include the base class here, so that other plugins can also extend it.
