@@ -7,4 +7,4 @@ parameters:
 		- providers
 		- class-two-factor-compat.php
 		- class-two-factor-core.php
-		- two-factor.php
+		- aiwos-two-factor.php
