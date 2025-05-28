@@ -1,12 +1,12 @@
 {
-  "name": "two-factor",
-  "title": "Two Factor",
+  "name": "aiwos-two-factor",
+  "title": "Aiwos Two Factor",
   "private": true,
   "engineStrict": true,
   "engines": {
     "node": ">=20"
   },
-  "homepage": "https://github.com/wordpress/two-factor",
+  "homepage": "https://github.com/aiwos/aiwos-two-factor",
   "scripts": {
     "env": "wp-env",
     "build": "grunt build",
@@ -19,14 +19,14 @@
     "format:php": "composer format",
     "format:js": "npm run lint:js -- --fix",
     "format:css": "npm run lint:css -- --fix",
-    "test": "wp-env run tests-cli --env-cwd=wp-content/plugins/two-factor vendor/bin/phpunit --",
+    "test": "wp-env run tests-cli --env-cwd=wp-content/plugins/aiwos-two-factor vendor/bin/phpunit --",
     "test:watch": "npm run composer test:watch",
-    "composer": "wp-env run tests-cli --env-cwd=wp-content/plugins/two-factor composer --",
+    "composer": "wp-env run tests-cli --env-cwd=wp-content/plugins/aiwos-two-factor composer --",
     "preinstall": "composer install"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/wordpress/two-factor.git"
+    "url": "https://github.com/aiwos/aiwos-two-factor"
   },
   "author": "georgestephanis",
   "license": "GPL-2.0-or-later",
