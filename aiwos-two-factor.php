@@ -1,6 +1,6 @@
 <?php
 /**
- * Two Factor
+ * Aiwos Two Factor
  *
  * @package     Two_Factor
  * @author      Plugin Contributors
@@ -8,7 +8,7 @@
  * @license     GPL-2.0-or-later
  *
  * @wordpress-plugin
- * Plugin Name: Two Factor (CUSTOMIZED, DO NOT UPDATE)
+ * Plugin Name: Aiwos Two Factor
  * Plugin URI: https://wordpress.org/plugins/two-factor/
  * Description: DO NOT UPDATE, featuring internally generated QR codes and a frontend TOTP activation.
  * Author: Plugin Contributors
