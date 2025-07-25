@@ -1,0 +1,6 @@
+== Changelog ==
+
+= 1.0-beta.1.0 =
+- This is the first release of the customized fork.
+- Updated the workflow file to replace `debian-security-buster` with a new base image since `debian-security-buster` is EOL (End of Life).
+
