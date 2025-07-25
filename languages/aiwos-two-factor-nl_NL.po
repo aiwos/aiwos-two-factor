@@ -1,0 +1,475 @@
+# Translation of Plugins - Two-Factor - Stable (latest release) in Dutch
+# This file is distributed under the same license as the Plugins - Two-Factor - Stable (latest release) package.
+msgid ""
+msgstr ""
+"PO-Revision-Date: 2025-04-15 20:31:37+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: GlotPress/4.0.1\n"
+"Language: nl\n"
+"Project-Id-Version: Plugins - Two-Factor - Stable (latest release)\n"
+
+#: class-two-factor-core.php:1866
+msgid "No providers are available for your account."
+msgstr "Er zijn geen providers beschikbaar voor je account."
+
+#: providers/class-two-factor-totp.php:122
+msgid "Use your authenticator app for time-based one-time passwords (TOTP)"
+msgstr "Gebruik je authenticator app voor tijdgebaseerde eenmalige wachtwoorden (TOTP)"
+
+#: class-two-factor-core.php:1958
+msgid "Select the primary method to use for two-factor authentication when signing into this site."
+msgstr "Selecteer de primaire methode om te gebruiken voor twee-factor authenticatie bij het inloggen op deze site."
+
+#: class-two-factor-core.php:1951
+msgid "Default"
+msgstr "Standaard"
+
+#: class-two-factor-core.php:1948
+msgid "Primary Method"
+msgstr "Primaire methode"
+
+#: class-two-factor-core.php:1924
+msgid "Enable %s"
+msgstr "%s inschakelen"
+
+#: providers/class-two-factor-totp.php:155
+msgid "Unable to disable TOTP provider for this user."
+msgstr "Kan TOTP provider voor deze gebruiker niet uitschakelen."
+
+#: class-two-factor-core.php:1910
+msgid "Configure a primary two-factor method along with a backup method, such as Recovery Codes, to avoid being locked out if you lose access to your primary method."
+msgstr "Configureer een primaire twee-factor methode samen met een back-up methode, zoals Recovery Codes, om te voorkomen dat je wordt buitengesloten als je de toegang tot je primaire methode verliest."
+
+#: class-two-factor-core.php:1871
+msgid "To prevent being locked out of your account, consider enabling a backup method like Recovery Codes in case you lose access to your primary authentication method."
+msgstr "Om te voorkomen dat je van je account wordt afgesloten, kun je overwegen om een back-upmethode zoals Recovery Codes in te schakelen voor het geval je de toegang tot je primaire authenticatiemethode verliest."
+
+#: providers/class-two-factor-totp.php:331
+msgid "Authenticator App QR Code"
+msgstr "Authenticator app QR-code"
+
+#. Author of the plugin
+#: two-factor.php
+msgid "WordPress.org Contributors"
+msgstr "WordPress.org Contributors"
+
+#: providers/class-two-factor-totp.php:410
+msgid "Reset authenticator app"
+msgstr "Reset authenticator app"
+
+#: providers/class-two-factor-totp.php:406
+msgid "An authenticator app is currently configured. You will need to re-scan the QR code on all devices if reset."
+msgstr "Er is momenteel een authenticator app geconfigureerd. Je moet de QR-code op alle apparaten opnieuw scannen als je deze opnieuw instelt."
+
+#: providers/class-two-factor-totp.php:113
+msgctxt "Provider Label"
+msgid "Authenticator App"
+msgstr "Authenticator app"
+
+#. translators: the two factor provider name
+#: providers/class-two-factor-provider.php:62
+msgid "Use %s"
+msgstr "Gebruik %s"
+
+#: providers/class-two-factor-fido-u2f.php:113
+msgid "Use your security key"
+msgstr "Gebruik je beveiligingssleutel"
+
+#: providers/class-two-factor-email.php:63
+msgid "Send a code to your email"
+msgstr "Verzend een code naar je e-mail"
+
+#: providers/class-two-factor-backup-codes.php:357
+msgid "Recovery Code:"
+msgstr "Herstelcode:"
+
+#: providers/class-two-factor-backup-codes.php:355
+msgid "Enter a recovery code."
+msgstr "Voer een herstelcode in."
+
+#: providers/class-two-factor-backup-codes.php:316
+msgid "Unable to enable recovery codes for this user."
+msgstr "Niet in staat om herstelcodes voor deze gebruiker in te schakelen."
+
+#. translators: %s: the site's domain
+#: providers/class-two-factor-backup-codes.php:296
+msgid "Two-Factor Recovery Codes for %s"
+msgstr "Twee-factor herstelcodes voor %s"
+
+#: providers/class-two-factor-backup-codes.php:176
+msgid "Generate new recovery codes"
+msgstr "Genereer nieuwe herstelcodes"
+
+#. translators: %s: count
+#: providers/class-two-factor-backup-codes.php:168
+#: providers/class-two-factor-backup-codes.php:312
+msgid "%s unused code remaining, each recovery code can only be used once."
+msgid_plural "%s unused codes remaining, each recovery code can only be used once."
+msgstr[0] "%s ongebruikte code resterend, elke herstelcode kan slechts één keer gebruikt worden."
+msgstr[1] "%s ongebruikte codes resterend, elke herstelcode kan slechts één keer gebruikt worden."
+
+#: providers/class-two-factor-backup-codes.php:130
+msgid "Use a recovery code"
+msgstr "Een herstelcode gebruiken"
+
+#: providers/class-two-factor-backup-codes.php:121
+msgctxt "Provider Label"
+msgid "Recovery Codes"
+msgstr "Herstelcodes"
+
+#: class-two-factor-core.php:1860
+msgid "Revalidate now"
+msgstr "Nu opnieuw valideren"
+
+#: class-two-factor-core.php:1859
+msgid "To update your Two-Factor options, you must first revalidate your session."
+msgstr "Om je twee-factor opties te updaten, moet je eerst je sessie opnieuw valideren."
+
+#: class-two-factor-core.php:1565
+msgid "You have revalidated successfully."
+msgstr "Je hebt succesvol gevalideerd."
+
+#: class-two-factor-core.php:1349
+msgid "Two Factor Revalidation required."
+msgstr "Twee-factor herbevestiging vereist."
+
+#: class-two-factor-core.php:973
+msgid "Having Problems?"
+msgstr "Heb je problemen?"
+
+#. translators: Example auth code.
+#: providers/class-two-factor-totp.php:354
+msgid "eg. %s"
+msgstr "bijv. %s"
+
+#: providers/class-two-factor-totp.php:194
+msgid "Unable to enable TOTP provider for this user."
+msgstr "Kan TOTP provider niet inschakelen voor deze gebruiker."
+
+#: class-two-factor-core.php:1792
+msgid "Password Reset"
+msgstr "Wachtwoord opnieuw instellen"
+
+#: class-two-factor-core.php:1788
+msgid "If you are the owner of this account, please check your email for instructions on regaining access."
+msgstr "Als je de eigenaar van deze account bent, controleer dan je e-mail voor instructies om weer toegang te krijgen."
+
+#: class-two-factor-core.php:1787
+msgid "There have been too many failed two-factor authentication attempts, which often indicates that the password has been compromised. The password has been reset in order to protect the account."
+msgstr "Er zijn te veel mislukte pogingen tot authenticatie met twee factoren geweest, wat er vaak op wijst dat het wachtwoord gecompromitteerd is. Het wachtwoord is opnieuw ingesteld om het account te beschermen."
+
+#: class-two-factor-core.php:1618
+msgid "ERROR: Too many invalid verification codes, you can try again in %s. This limit protects your account against automated attacks."
+msgstr "FOUT: te veel ongeldige verificatiecodes, je kan het over %s opnieuw proberen. Deze limiet beschermt je account tegen geautomatiseerde aanvallen."
+
+#: class-two-factor-core.php:883
+msgid "Your password was reset because of too many failed Two Factor attempts. You will need to <a href=\"%s\">create a new password</a> to regain access. Please check your email for more information."
+msgstr "Je wachtwoord is opnieuw ingesteld vanwege te veel mislukte twee factor pogingen. Je moet <a href=\"%s\">een nieuw wachtwoord maken</a> om weer toegang te krijgen. Controleer je e-mail voor meer informatie."
+
+#: class-two-factor-core.php:833
+msgid "WARNING: Your account has attempted to login without providing a valid two factor token. The last failed login occurred %2$s ago. If this wasn't you, you should reset your password."
+msgid_plural "WARNING: Your account has attempted to login %1$s times without providing a valid two factor token. The last failed login occurred %2$s ago. If this wasn't you, you should reset your password."
+msgstr[0] "WAARSCHUWING: je account heeft geprobeerd in te loggen zonder een geldige twee-factor token te verstrekken. De laatste mislukte login vond %2$s geleden plaats. Als je dit niet was, moet je je wachtwoord resetten."
+msgstr[1] "WAARSCHUWING: je account heeft geprobeerd om %1$s keer in te loggen zonder een geldige twee-factor token te verstrekken. De laatste mislukte login vond %2$s geleden plaats. Als je dit niet was, moet je je wachtwoord resetten."
+
+#: providers/class-two-factor-totp.php:705
+msgid "Authenticate"
+msgstr "Authenticeren"
+
+#: providers/class-two-factor-totp.php:689
+msgid "Enter the code generated by your authenticator app."
+msgstr "Voer de code in die door je authenticatie app is gegenereerd."
+
+#: providers/class-two-factor-totp.php:182
+msgid "Invalid Two Factor Authentication secret key."
+msgstr "Ongeldige geheime sleutel voor twee-factor authenticatie."
+
+#: providers/class-two-factor-totp.php:186
+msgid "Invalid Two Factor Authentication code."
+msgstr "Ongeldige twee factor authenticatie code."
+
+#: providers/class-two-factor-totp.php:190
+msgid "Unable to save Two Factor Authentication code. Please re-scan the QR code and enter the code provided by your application."
+msgstr "Two Factor Authentication code kan niet worden opgeslagen. Scan de QR code opnieuw en voer de code in die door je toepassing is verstrekt."
+
+#: providers/class-two-factor-totp.php:351
+#: providers/class-two-factor-totp.php:692
+msgid "Authentication Code:"
+msgstr "Authenticatiecode:"
+
+#: providers/class-two-factor-totp.php:293
+msgid "Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup."
+msgstr "Scan de QR-code of voer de sleutel handmatig in en voer vervolgens een authenticatiecode van je app in om de installatie te voltooien."
+
+#: providers/class-two-factor-fido-u2f.php:273
+msgid "New Security Key"
+msgstr "Nieuwe veiligheidssleutel"
+
+#: providers/class-two-factor-fido-u2f.php:237
+msgid "Requires an HTTPS connection. Configure your security keys in the \"Security Keys\" section below."
+msgstr "Een HTTPS verbinding is vereist. Configureer je beveiligingssleutels in de onderstaande \"Beveiligingssleutels\" sectie."
+
+#: providers/class-two-factor-fido-u2f.php:166
+msgid "An error occurred while creating authentication data."
+msgstr "Er is een fout opgetreden bij het maken van verificatiegegevens."
+
+#: providers/class-two-factor-fido-u2f.php:154
+msgid "U2F requires an HTTPS connection. Please use an alternative 2nd factor method."
+msgstr "U2F vereist een HTTPS-verbinding. Gebruik een alternatieve 2FA-methode."
+
+#: providers/class-two-factor-fido-u2f.php:104
+msgctxt "Provider Label"
+msgid "FIDO U2F Security Keys"
+msgstr "FIDO U2F Security Keys"
+
+#: providers/class-two-factor-fido-u2f-admin.php:358
+msgid "Item not updated."
+msgstr "Item niet geüpdatet."
+
+#: providers/class-two-factor-fido-u2f-admin.php:321
+msgid "Delete"
+msgstr "Verwijder"
+
+#: providers/class-two-factor-fido-u2f-admin.php:304
+msgid "Rename"
+msgstr "Hernoem"
+
+#: providers/class-two-factor-fido-u2f-admin.php:212
+msgid "You can find FIDO U2F Security Key devices for sale from here."
+msgstr "Je kunt hier FIDO U2F beveiligingssleutel apparaten te koop vinden."
+
+#: providers/class-two-factor-fido-u2f-admin.php:208
+msgid "Your new security key registered."
+msgstr "Je nieuwe beveiligingssleutel geregistreerd."
+
+#: providers/class-two-factor-fido-u2f-admin.php:201
+msgctxt "security key"
+msgid "Register New Key"
+msgstr "Registreer een nieuwe sleutel"
+
+#: providers/class-two-factor-fido-u2f-admin.php:194
+msgid "U2F requires an HTTPS connection. You won't be able to add new security keys over HTTP."
+msgstr "U2F vereist een HTTPS verbinding. Je kunt geen nieuwe beveiligingssleutels toevoegen via HTTP."
+
+#: providers/class-two-factor-fido-u2f-admin.php:190
+msgid "Security Keys"
+msgstr "Beveiligingssleutels"
+
+#: providers/class-two-factor-fido-u2f-admin.php:137
+msgid "Error while saving the changes."
+msgstr "Fout tijdens het opslaan van de wijzigingen."
+
+#: providers/class-two-factor-fido-u2f-admin.php:111
+msgid "FIDO U2F appears to be not supported by your web browser. Try using Google Chrome or Firefox."
+msgstr "FIDO U2F lijkt niet te worden ondersteund door je web browser. Probeer het eens met Google Chrome of Firefox."
+
+#: providers/class-two-factor-fido-u2f-admin.php:109
+msgid "U2F request timeout reached."
+msgstr "Time-out van U2F aanvraag bereikt."
+
+#: providers/class-two-factor-fido-u2f-admin.php:108
+msgid "U2F device ineligible."
+msgstr "U2F apparaat komt niet in aanmerking."
+
+#: providers/class-two-factor-fido-u2f-admin.php:107
+msgid "Unsupported U2F configuration."
+msgstr "U2F configuratie wordt niet ondersteund."
+
+#: providers/class-two-factor-fido-u2f-admin.php:106
+msgid "Bad U2F request."
+msgstr "Onjuiste U2F aanvraag."
+
+#: providers/class-two-factor-fido-u2f-admin.php:105
+msgid "Other U2F error."
+msgstr "Andere U2F fout."
+
+#: providers/class-two-factor-fido-u2f-admin.php:104
+msgid "Request OK."
+msgstr "Aanvraag OK."
+
+#: providers/class-two-factor-fido-u2f-admin.php:101
+msgid "U2F request failed."
+msgstr "U2F aanvraag afgewezen."
+
+#: providers/class-two-factor-fido-u2f-admin.php:100
+#: providers/class-two-factor-fido-u2f.php:182
+msgid "Now insert (and tap) your Security Key."
+msgstr "Voer nu je beveiligingssleutel in (en tik erop)."
+
+#: providers/class-two-factor-fido-u2f-admin-list-table.php:148
+msgid "Update"
+msgstr "Update"
+
+#: providers/class-two-factor-fido-u2f-admin-list-table.php:147
+msgid "Cancel"
+msgstr "Annuleer"
+
+#: providers/class-two-factor-fido-u2f-admin-list-table.php:34
+msgid "Last Used"
+msgstr "Laatst gebruikt"
+
+#: providers/class-two-factor-fido-u2f-admin-list-table.php:33
+msgid "Added"
+msgstr "Toegevoegd"
+
+#: providers/class-two-factor-fido-u2f-admin-list-table.php:32
+#: providers/class-two-factor-fido-u2f-admin-list-table.php:125
+msgid "Name"
+msgstr "Naam"
+
+#. translators: %s: email address
+#: providers/class-two-factor-email.php:376
+msgid "Authentication codes will be sent to %s."
+msgstr "Authenticatiecodes worden verzonden naar %s."
+
+#: providers/class-two-factor-email.php:301
+msgid "Resend Code"
+msgstr "Code opnieuw verzenden"
+
+#: providers/class-two-factor-email.php:298
+msgid "Log In"
+msgstr "Inloggen"
+
+#: providers/class-two-factor-email.php:294
+msgid "A verification code has been sent to the email address associated with your account."
+msgstr "Er is een verificatiecode verzonden naar het e-mailadres dat aan je account is gekoppeld."
+
+#. translators: %s: token
+#: providers/class-two-factor-email.php:251
+msgid "Enter %s to log in."
+msgstr "Voer %s in om in te loggen."
+
+#. translators: %s: site name
+#: providers/class-two-factor-email.php:249
+msgid "Your login confirmation code for %s"
+msgstr "Je login bevestigingscode voor %s"
+
+#: providers/class-two-factor-email.php:54
+msgctxt "Provider Label"
+msgid "Email"
+msgstr "E-mail"
+
+#: providers/class-two-factor-dummy.php:48
+msgid "Yup."
+msgstr "Yep."
+
+#: providers/class-two-factor-dummy.php:46
+msgid "Are you really you?"
+msgstr "Ben jij het echt?"
+
+#: providers/class-two-factor-dummy.php:33
+msgctxt "Provider Label"
+msgid "Dummy Method"
+msgstr "Dummy methode"
+
+#: providers/class-two-factor-backup-codes.php:361
+#: providers/class-two-factor-totp.php:358
+msgid "Submit"
+msgstr "Verzenden"
+
+#: providers/class-two-factor-email.php:296
+msgid "Verification Code:"
+msgstr "Verificatie code:"
+
+#: providers/class-two-factor-backup-codes.php:184
+msgid "Download Codes"
+msgstr "Codes downloaden"
+
+#: providers/class-two-factor-backup-codes.php:182
+msgid "Write these down! Once you navigate away from this page, you will not be able to view these codes again."
+msgstr "Schrijf deze op! Als je eenmaal weg bent van deze pagina, kun je deze codes niet meer bekijken."
+
+#. translators: %s: URL for code regeneration
+#: providers/class-two-factor-backup-codes.php:103
+msgid "Two-Factor: You are out of recovery codes and need to <a href=\"%s\">regenerate!</a>"
+msgstr "Twee-factor: je bent door je herstelcodes heen en moet <a href=\"%s\">opnieuw genereren!</a>"
+
+#: includes/function.login-header.php:133
+msgid "Powered by WordPress"
+msgstr "Aangedreven door WordPress"
+
+#: includes/function.login-header.php:130
+msgid "Usage of the title attribute on the login logo is not recommended for accessibility reasons. Use the link text instead."
+msgstr "Het gebruik van het title-attribuut op het login logo wordt om toegankelijkheidsredenen niet aanbevolen. Gebruik in plaats daarvan de linktekst."
+
+#: includes/function.login-header.php:104
+msgid "https://wordpress.org/"
+msgstr "https://wordpress.org/"
+
+#. translators: %s: Login screen title.
+#: includes/function.login-header.php:57
+msgid "Recovery Mode &#8212; %s"
+msgstr "Herstelmodus &#8212; %s"
+
+#. translators: Login screen title. 1: Login screen name, 2: Network or site
+#. name.
+#: includes/function.login-header.php:53
+msgid "%1$s &lsaquo; %2$s &#8212; WordPress"
+msgstr "%1$s &lsaquo; %2$s &#8212; WordPress"
+
+#. translators: %s: Site title.
+#: includes/function.login-footer.php:29
+msgctxt "site"
+msgid "&larr; Go to %s"
+msgstr "&larr; Ga naar %s"
+
+#: class-two-factor-core.php:1874
+msgid "Two-Factor Options"
+msgstr "Two-Factor opties"
+
+#: class-two-factor-core.php:1822
+msgid "Disabled"
+msgstr "Uitgeschakeld"
+
+#: class-two-factor-core.php:1803
+msgid "Two-Factor"
+msgstr "Two-Factor"
+
+#: class-two-factor-core.php:1464
+msgid "You have logged in successfully."
+msgstr "Je bent succesvol ingelogd."
+
+#: class-two-factor-core.php:1641
+msgid "ERROR: Invalid verification code."
+msgstr "FOUT: ongeldige verificatiecode."
+
+#: class-two-factor-core.php:914 class-two-factor-core.php:1400
+#: class-two-factor-core.php:1531 class-two-factor-core.php:1596
+msgid "Cheatin&#8217; uh?"
+msgstr "Aan het valsspelen, hé?"
+
+#: class-two-factor-core.php:813 class-two-factor-core.php:1415
+msgid "Failed to create a login nonce."
+msgstr "Het aanmaken van een login nonce is mislukt."
+
+#: class-two-factor-core.php:741
+msgid "Error: API login for user disabled."
+msgstr "Fout: API login voor gebruiker uitgeschakeld."
+
+#. translators: %s: version number
+#: class-two-factor-core.php:282
+msgid "FIDO U2F is not available because you are using PHP %s. (Requires 5.3 or greater)"
+msgstr "FIDO U2F is niet beschikbaar omdat je PHP %s gebruikt. (Vereist 5.3 of hoger)"
+
+#. Author URI of the plugin
+#: two-factor.php
+msgid "https://github.com/wordpress/two-factor/graphs/contributors"
+msgstr "https://github.com/wordpress/two-factor/graphs/contributors"
+
+#. Description of the plugin
+#: two-factor.php
+msgid "Enable Two-Factor Authentication using time-based one-time passwords, Universal 2nd Factor (FIDO U2F, YubiKey), email, and backup verification codes."
+msgstr "Inschakelen van twee-factor authenticatie met tijdgebaseerde eenmalige wachtwoorden, Universele 2e Factor (FIDO U2F, YubiKey), e-mail en back-up verificatiecodes."
+
+#. Plugin URI of the plugin
+#: two-factor.php
+msgid "https://wordpress.org/plugins/two-factor/"
+msgstr "https://wordpress.org/plugins/two-factor/"
+
+#. Plugin Name of the plugin
+#: two-factor.php
+msgid "Two Factor"
+msgstr "Two Factor"
