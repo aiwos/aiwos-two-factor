@@ -10,9 +10,9 @@
  * @wordpress-plugin
  * Plugin Name: Aiwos Two Factor
  * Plugin URI: https://github.com/aiwos/aiwos-two-factor
- * Description: Featuring internally generated QR codes and a frontend TOTP activation.
+ * Description: Customized Two Factor plugin.
  * Author: Aiwos, Plugin Contributors
- * Version: 1.0-beta.1.0
+ * Version: 1.0-beta.2.0
  * Author URI: https://github.com/wordpress/two-factor/graphs/contributors
  * Network: True
  * Text Domain: aiwos-two-factor
@@ -26,7 +26,7 @@ define( 'TWO_FACTOR_DIR', plugin_dir_path( __FILE__ ) );
 /**
  * Version of the plugin.
  */
-define( 'TWO_FACTOR_VERSION', '1.0-beta.1.0' );
+define( 'TWO_FACTOR_VERSION', '1.0-beta.2.0' );
 
 /**
  * Include the base class here, so that other plugins can also extend it.
