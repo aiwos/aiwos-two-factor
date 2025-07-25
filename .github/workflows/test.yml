@@ -73,13 +73,10 @@ jobs:
                   - '8.2'
                   - '8.1'
                   - '8.0'
-                  - '7.4'
-                  - '7.3'
-                  - '7.2'
                 wp:
                   - latest
                   - trunk
-                  - '6.3'
+                  - '6.7'
         env:
             WP_ENV_PHP_VERSION: ${{ matrix.php }}
             WP_ENV_CORE: ${{ matrix.wp == 'trunk' && 'WordPress/WordPress' || format( 'https://wordpress.org/wordpress-{0}.zip', matrix.wp ) }}

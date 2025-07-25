@@ -51,7 +51,7 @@ class Two_Factor_Email extends Two_Factor_Provider {
 	 * @since 0.1-dev
 	 */
 	public function get_label() {
-		return _x( 'Email', 'Provider Label', 'two-factor' );
+		return _x( 'Email', 'Provider Label', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -60,7 +60,7 @@ class Two_Factor_Email extends Two_Factor_Provider {
 	 * @since 0.9.0
 	 */
 	public function get_alternative_provider_label() {
-		return __( 'Send a code to your email', 'two-factor' );
+		return __( 'Send a code to your email', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -246,9 +246,9 @@ class Two_Factor_Email extends Two_Factor_Provider {
 		$token = $this->generate_token( $user->ID );
 
 		/* translators: %s: site name */
-		$subject = wp_strip_all_tags( sprintf( __( 'Your login confirmation code for %s', 'two-factor' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) ) );
+		$subject = wp_strip_all_tags( sprintf( __( 'Your login confirmation code for %s', 'aiwos-two-factor' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) ) );
 		/* translators: %s: token */
-		$message = wp_strip_all_tags( sprintf( __( 'Enter %s to log in.', 'two-factor' ), $token ) );
+		$message = wp_strip_all_tags( sprintf( __( 'Enter %s to log in.', 'aiwos-two-factor' ), $token ) );
 
 		/**
 		 * Filter the token email subject.
@@ -291,14 +291,14 @@ class Two_Factor_Email extends Two_Factor_Provider {
 
 		require_once ABSPATH . '/wp-admin/includes/template.php';
 		?>
-		<p class="two-factor-prompt"><?php esc_html_e( 'A verification code has been sent to the email address associated with your account.', 'two-factor' ); ?></p>
+		<p class="two-factor-prompt"><?php esc_html_e( 'A verification code has been sent to the email address associated with your account.', 'aiwos-two-factor' ); ?></p>
 		<p>
-			<label for="authcode"><?php esc_html_e( 'Verification Code:', 'two-factor' ); ?></label>
+			<label for="authcode"><?php esc_html_e( 'Verification Code:', 'aiwos-two-factor' ); ?></label>
 			<input type="text" inputmode="numeric" name="two-factor-email-code" id="authcode" class="input authcode" value="" size="20" pattern="[0-9 ]*" autocomplete="one-time-code" placeholder="<?php echo esc_attr( $token_placeholder ); ?>" data-digits="<?php echo esc_attr( $token_length ); ?>" />
-			<?php submit_button( __( 'Verify', 'two-factor' ) ); ?>
+			<?php submit_button( __( 'Verify', 'aiwos-two-factor' ) ); ?>
 		</p>
 		<p class="two-factor-email-resend">
-			<input type="submit" class="button" name="<?php echo esc_attr( self::INPUT_NAME_RESEND_CODE ); ?>" value="<?php esc_attr_e( 'Resend Code', 'two-factor' ); ?>" />
+			<input type="submit" class="button" name="<?php echo esc_attr( self::INPUT_NAME_RESEND_CODE ); ?>" value="<?php esc_attr_e( 'Resend Code', 'aiwos-two-factor' ); ?>" />
 		</p>
 		<script type="text/javascript">
 			setTimeout( function(){
@@ -373,7 +373,7 @@ class Two_Factor_Email extends Two_Factor_Provider {
 			echo esc_html(
 				sprintf(
 				/* translators: %s: email address */
-					__( 'Authentication codes will be sent to %s.', 'two-factor' ),
+					__( 'Authentication codes will be sent to %s.', 'aiwos-two-factor' ),
 					$email
 				)
 			);

@@ -99,7 +99,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 				wp_nonce_field( 'user_two_factor_totp_options_shortcode', '_nonce_user_two_factor_totp_options_shortcode', false );
 				?>
 				<p>
-				<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor' ); ?>
+				<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'aiwos-two-factor' ); ?>
 			</p>
 			<p id="two-factor-qr-code">
 				<a href="<?php echo $totp_url; ?>">
@@ -137,7 +137,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 							title = document.createElement( 'title' );
 
 						svg.role = 'image';
-						svg.ariaLabel = <?php echo wp_json_encode( __( 'Authenticator App QR Code', 'two-factor' ) ); ?>;
+						svg.ariaLabel = <?php echo wp_json_encode( __( 'Authenticator App QR Code', 'aiwos-two-factor' ) ); ?>;
 						title.innerText = svg.ariaLabel;
 						svg.appendChild( title );
 					};
@@ -156,15 +156,15 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 				<p>
 					<input type="hidden" name="two-factor-totp-key" value="<?php echo esc_attr( $key ); ?>" />
 					<label for="two-factor-totp-authcode">
-				<?php esc_html_e( 'Authentication Code:', 'two-factor' ); ?>
+				<?php esc_html_e( 'Authentication Code:', 'aiwos-two-factor' ); ?>
 						<input type="tel" name="two-factor-totp-authcode" id="two-factor-totp-authcode" class="input" value="" size="20" pattern="[0-9]*" />
 					</label>
-					<input type="submit" class="button" name="two-factor-totp-submit" value="<?php esc_attr_e( 'Submit', 'two-factor' ); ?>" />
+					<input type="submit" class="button" name="two-factor-totp-submit" value="<?php esc_attr_e( 'Submit', 'aiwos-two-factor' ); ?>" />
 				</p>
 				</form>
 				<?php else : ?>
 				<p class="success">
-					<?php esc_html_e( 'Secret key is configured and registered. It is not possible to view it again for security reasons.', 'two-factor' ); ?>
+					<?php esc_html_e( 'Secret key is configured and registered. It is not possible to view it again for security reasons.', 'aiwos-two-factor' ); ?>
 				</p>
 				<?php endif; ?>
 			</div>
@@ -172,7 +172,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		} else {
 			?>
 			<p class="error">
-			<?php esc_html_e( 'Login to set up your Time-based One-Time Password.', 'two-factor' ); ?>
+			<?php esc_html_e( 'Login to set up your Time-based One-Time Password.', 'aiwos-two-factor' ); ?>
 			</p>
 			<?php
 		}
@@ -205,7 +205,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 					if ( $this->is_valid_key( $key ) ) {
 						if ( $this->is_valid_authcode( $key, $authcode ) ) {
 							if ( ! $this->set_user_totp_key( $user_id, $key ) ) {
-									$errors[] = __( 'Unable to save Two Factor Authentication code. Please re-scan the QR code and enter the code provided by your application.', 'two-factor' );
+									$errors[] = __( 'Unable to save Two Factor Authentication code. Please re-scan the QR code and enter the code provided by your application.', 'aiwos-two-factor' );
 							} else {
 
 								$enabled_providers = get_user_meta( $user_id, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY, true );
@@ -226,10 +226,10 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 
 							}
 						} else {
-							$errors[] = __( 'Invalid Two Factor Authentication code.', 'two-factor' );
+							$errors[] = __( 'Invalid Two Factor Authentication code.', 'aiwos-two-factor' );
 						}
 					} else {
-						$errors[] = __( 'Invalid Two Factor Authentication secret key.', 'two-factor' );
+						$errors[] = __( 'Invalid Two Factor Authentication secret key.', 'aiwos-two-factor' );
 					}
 				}
 
@@ -303,7 +303,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	 * Returns the name of the provider.
 	 */
 	public function get_label() {
-		return _x( 'Authenticator App', 'Provider Label', 'two-factor' );
+		return _x( 'Authenticator App', 'Provider Label', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -312,7 +312,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 	 * @since 0.9.0
 	 */
 	public function get_alternative_provider_label() {
-		return __( 'Use your authenticator app for time-based one-time passwords (TOTP)', 'two-factor' );
+		return __( 'Use your authenticator app for time-based one-time passwords (TOTP)', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -345,7 +345,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		$this->delete_user_totp_key( $user_id );
 
 		if ( ! Two_Factor_Core::disable_provider_for_user( $user_id, 'Two_Factor_Totp' ) ) {
-			return new WP_Error( 'db_error', __( 'Unable to disable TOTP provider for this user.', 'two-factor' ), array( 'status' => 500 ) );
+			return new WP_Error( 'db_error', __( 'Unable to disable TOTP provider for this user.', 'aiwos-two-factor' ), array( 'status' => 500 ) );
 		}
 
 		ob_start();
@@ -372,19 +372,19 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		$code = preg_replace( '/\s+/', '', $request['code'] );
 
 		if ( ! $this->is_valid_key( $key ) ) {
-			return new WP_Error( 'invalid_key', __( 'Invalid Two Factor Authentication secret key.', 'two-factor' ), array( 'status' => 400 ) );
+			return new WP_Error( 'invalid_key', __( 'Invalid Two Factor Authentication secret key.', 'aiwos-two-factor' ), array( 'status' => 400 ) );
 		}
 
 		if ( ! $this->is_valid_authcode( $key, $code ) ) {
-			return new WP_Error( 'invalid_key_code', __( 'Invalid Two Factor Authentication code.', 'two-factor' ), array( 'status' => 400 ) );
+			return new WP_Error( 'invalid_key_code', __( 'Invalid Two Factor Authentication code.', 'aiwos-two-factor' ), array( 'status' => 400 ) );
 		}
 
 		if ( ! $this->set_user_totp_key( $user_id, $key ) ) {
-			return new WP_Error( 'db_error', __( 'Unable to save Two Factor Authentication code. Please re-scan the QR code and enter the code provided by your application.', 'two-factor' ), array( 'status' => 500 ) );
+			return new WP_Error( 'db_error', __( 'Unable to save Two Factor Authentication code. Please re-scan the QR code and enter the code provided by your application.', 'aiwos-two-factor' ), array( 'status' => 500 ) );
 		}
 
 		if ( $request->get_param( 'enable_provider' ) && ! Two_Factor_Core::enable_provider_for_user( $user_id, 'Two_Factor_Totp' ) ) {
-			return new WP_Error( 'db_error', __( 'Unable to enable TOTP provider for this user.', 'two-factor' ), array( 'status' => 500 ) );
+			return new WP_Error( 'db_error', __( 'Unable to enable TOTP provider for this user.', 'aiwos-two-factor' ), array( 'status' => 500 ) );
 		}
 
 		ob_start();
@@ -483,7 +483,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 			?>
 
 			<p>
-			<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'two-factor' ); ?>
+			<?php esc_html_e( 'Please scan the QR code or manually enter the key, then enter an authentication code from your app in order to complete setup.', 'aiwos-two-factor' ); ?>
 			</p>
 			<p id="two-factor-qr-code">
 				<a href="<?php echo $totp_url; ?>">
@@ -521,7 +521,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 							title = document.createElement( 'title' );
 
 						svg.role = 'image';
-						svg.ariaLabel = <?php echo wp_json_encode( __( 'Authenticator App QR Code', 'two-factor' ) ); ?>;
+						svg.ariaLabel = <?php echo wp_json_encode( __( 'Authenticator App QR Code', 'aiwos-two-factor' ) ); ?>;
 						title.innerText = svg.ariaLabel;
 						svg.appendChild( title );
 					};
@@ -541,14 +541,14 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 			<p>
 				<input type="hidden" id="two-factor-totp-key" name="two-factor-totp-key" value="<?php echo esc_attr( $key ); ?>" />
 				<label for="two-factor-totp-authcode">
-			<?php esc_html_e( 'Authentication Code:', 'two-factor' ); ?>
+			<?php esc_html_e( 'Authentication Code:', 'aiwos-two-factor' ); ?>
 			<?php
 			/* translators: Example auth code. */
-			$placeholder = sprintf( __( 'eg. %s', 'two-factor' ), '123456' );
+			$placeholder = sprintf( __( 'eg. %s', 'aiwos-two-factor' ), '123456' );
 			?>
 					<input type="text" inputmode="numeric" name="two-factor-totp-authcode" id="two-factor-totp-authcode" class="input" value="" size="20" pattern="[0-9 ]*" placeholder="<?php echo esc_attr( $placeholder ); ?>" autocomplete="off" />
 				</label>
-				<input type="submit" class="button totp-submit" name="two-factor-totp-submit" value="<?php esc_attr_e( 'Submit', 'two-factor' ); ?>" />
+				<input type="submit" class="button totp-submit" name="two-factor-totp-submit" value="<?php esc_attr_e( 'Submit', 'aiwos-two-factor' ); ?>" />
 			</p>
 
 			<script>
@@ -596,11 +596,11 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 
 		<?php else : ?>
 			<p class="success">
-			<?php esc_html_e( 'An authenticator app is currently configured. You will need to re-scan the QR code on all devices if reset.', 'two-factor' ); ?>
+			<?php esc_html_e( 'An authenticator app is currently configured. You will need to re-scan the QR code on all devices if reset.', 'aiwos-two-factor' ); ?>
 			</p>
 			<p>
 				<button type="button" class="button button-secondary reset-totp-key hide-if-no-js">
-			<?php esc_html_e( 'Reset authenticator app', 'two-factor' ); ?>
+			<?php esc_html_e( 'Reset authenticator app', 'aiwos-two-factor' ); ?>
 				</button>
 				<script>
 					( function( $ ) {
@@ -898,10 +898,10 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 		include_once ABSPATH . '/wp-admin/includes/template.php';
 		?>
 		<p class="two-factor-prompt">
-		<?php esc_html_e( 'Enter the code generated by your authenticator app.', 'two-factor' ); ?>
+		<?php esc_html_e( 'Enter the code generated by your authenticator app.', 'aiwos-two-factor' ); ?>
 		</p>
 		<p>
-			<label for="authcode"><?php esc_html_e( 'Authentication Code:', 'two-factor' ); ?></label>
+			<label for="authcode"><?php esc_html_e( 'Authentication Code:', 'aiwos-two-factor' ); ?></label>
 			<input type="text" inputmode="numeric" autocomplete="one-time-code" name="authcode" id="authcode" class="input authcode" value="" size="20" pattern="[0-9 ]*" placeholder="123 456" autocomplete="one-time-code" data-digits="<?php echo esc_attr( self::DEFAULT_DIGIT_COUNT ); ?>" />
 		</p>
 		<script type="text/javascript">
@@ -914,7 +914,7 @@ class Two_Factor_Totp extends Two_Factor_Provider {
 			}, 200);
 		</script>
 		<?php
-		submit_button( __( 'Authenticate', 'two-factor' ) );
+		submit_button( __( 'Authenticate', 'aiwos-two-factor' ) );
 	}
 
 	/**

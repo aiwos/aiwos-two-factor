@@ -101,7 +101,7 @@ class Two_Factor_FIDO_U2F extends Two_Factor_Provider {
 	 * @since 0.1-dev
 	 */
 	public function get_label() {
-		return _x( 'FIDO U2F Security Keys', 'Provider Label', 'two-factor' );
+		return _x( 'FIDO U2F Security Keys', 'Provider Label', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -110,7 +110,7 @@ class Two_Factor_FIDO_U2F extends Two_Factor_Provider {
 	 * @since 0.9.0
 	 */
 	public function get_alternative_provider_label() {
-		return __( 'Use your security key', 'two-factor' );
+		return __( 'Use your security key', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -151,7 +151,7 @@ class Two_Factor_FIDO_U2F extends Two_Factor_Provider {
 		// U2F doesn't work without HTTPS.
 		if ( ! is_ssl() ) {
 			?>
-			<p><?php esc_html_e( 'U2F requires an HTTPS connection. Please use an alternative 2nd factor method.', 'two-factor' ); ?></p>
+			<p><?php esc_html_e( 'U2F requires an HTTPS connection. Please use an alternative 2nd factor method.', 'aiwos-two-factor' ); ?></p>
 			<?php
 
 			return;
@@ -163,7 +163,7 @@ class Two_Factor_FIDO_U2F extends Two_Factor_Provider {
 			update_user_meta( $user->ID, self::AUTH_DATA_USER_META_KEY, $data );
 		} catch ( Exception $e ) {
 			?>
-			<p><?php esc_html_e( 'An error occurred while creating authentication data.', 'two-factor' ); ?></p>
+			<p><?php esc_html_e( 'An error occurred while creating authentication data.', 'aiwos-two-factor' ); ?></p>
 			<?php
 			return;
 		}
@@ -179,7 +179,7 @@ class Two_Factor_FIDO_U2F extends Two_Factor_Provider {
 		wp_enqueue_script( 'fido-u2f-login' );
 
 		?>
-		<p><?php esc_html_e( 'Now insert (and tap) your Security Key.', 'two-factor' ); ?></p>
+		<p><?php esc_html_e( 'Now insert (and tap) your Security Key.', 'aiwos-two-factor' ); ?></p>
 		<input type="hidden" name="u2f_response" id="u2f_response" />
 		<?php
 	}
@@ -234,7 +234,7 @@ class Two_Factor_FIDO_U2F extends Two_Factor_Provider {
 	public function user_options( $user ) {
 		?>
 		<p>
-			<?php esc_html_e( 'Requires an HTTPS connection. Configure your security keys in the "Security Keys" section below.', 'two-factor' ); ?>
+			<?php esc_html_e( 'Requires an HTTPS connection. Configure your security keys in the "Security Keys" section below.', 'aiwos-two-factor' ); ?>
 		</p>
 		<?php
 	}
@@ -270,7 +270,7 @@ class Two_Factor_FIDO_U2F extends Two_Factor_Provider {
 			'counter'     => $register->counter,
 		);
 
-		$register['name']      = __( 'New Security Key', 'two-factor' );
+		$register['name']      = __( 'New Security Key', 'aiwos-two-factor' );
 		$register['added']     = time();
 		$register['last_used'] = $register['added'];
 

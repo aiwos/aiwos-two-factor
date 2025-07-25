@@ -40,24 +40,24 @@ jobs:
       - name: Prepare for artifact creation
         run: |
              rm -rf node_modules
-             mkdir two-factor
-             rsync -a ./ ./two-factor --exclude two-factor --exclude vendor --exclude includes/BaconQrCode
+             mkdir aiwos-two-factor
+             rsync -a ./ ./aiwos-two-factor --exclude aiwos-two-factor --exclude vendor --exclude includes/BaconQrCode
              mkdir build
 
       - name: Create artifact
         uses: montudor/action-zip@v1
         with:
-          args: zip -X -r build/two-factor-${{ github.event.release.tag_name }}.zip two-factor -x *.git* *node_modules/\* .* "*/\.*" *CODE_OF_CONDUCT.md *readme-dev.md *.phar *appsero.json *CONTRIBUTING.md *ISSUE_TEMPLATE.md *PULL_REQUEST_TEMPLATE.md *.dist *.neon *composer* *package* *phpunit* *webpack* *tests** *Gruntfile.js *SECURITY.md *readme.md *vendor/\** *includes/BaconQrCode/\**
+          args: zip -X -r build/aiwos-two-factor-${{ github.event.release.tag_name }}.zip aiwos-two-factor -x *.git* *node_modules/\* .* "*/\.*" *CODE_OF_CONDUCT.md *readme-dev.md *.phar *appsero.json *CONTRIBUTING.md *ISSUE_TEMPLATE.md *PULL_REQUEST_TEMPLATE.md *.dist *.neon *composer* *package* *phpunit* *webpack* *tests** *Gruntfile.js *SECURITY.md *readme.md *vendor/\** *includes/BaconQrCode/\**
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: two-factor
-          path: build/two-factor-${{ github.event.release.tag_name }}.zip
+          name: aiwos-two-factor
+          path: build/aiwos-two-factor-${{ github.event.release.tag_name }}.zip
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v1
         with:
-          files: build/two-factor-${{ github.event.release.tag_name }}.zip
+          files: build/aiwos-two-factor-${{ github.event.release.tag_name }}.zip
         env:
           GITHUB_TOKEN: ${{ github.token }}

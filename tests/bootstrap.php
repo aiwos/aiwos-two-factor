@@ -34,7 +34,7 @@ require_once dirname( __DIR__ ) . '/includes/function.login-footer.php';
 tests_add_filter(
 	'muplugins_loaded',
 	function() {
-		require_once dirname( __DIR__ ) . '/two-factor.php';
+		require_once dirname( __DIR__ ) . '/aiwos-two-factor.php';
 	}
 );
 

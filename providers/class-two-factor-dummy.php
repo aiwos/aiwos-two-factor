@@ -30,7 +30,7 @@ class Two_Factor_Dummy extends Two_Factor_Provider {
 	 * @since 0.1-dev
 	 */
 	public function get_label() {
-		return _x( 'Dummy Method', 'Provider Label', 'two-factor' );
+		return _x( 'Dummy Method', 'Provider Label', 'aiwos-two-factor' );
 	}
 
 	/**
@@ -43,9 +43,9 @@ class Two_Factor_Dummy extends Two_Factor_Provider {
 	public function authentication_page( $user ) {
 		require_once ABSPATH . '/wp-admin/includes/template.php';
 		?>
-		<p><?php esc_html_e( 'Are you really you?', 'two-factor' ); ?></p>
+		<p><?php esc_html_e( 'Are you really you?', 'aiwos-two-factor' ); ?></p>
 		<?php
-		submit_button( __( 'Yup.', 'two-factor' ) );
+		submit_button( __( 'Yup.', 'aiwos-two-factor' ) );
 	}
 
 	/**
