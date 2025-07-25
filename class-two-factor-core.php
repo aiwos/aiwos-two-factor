@@ -139,7 +139,7 @@ class Two_Factor_Core {
 	 *
 	 * @return void
 	 */
-	private static function aiwos_two_factor_load_textdomain() {
+	public static function aiwos_two_factor_load_textdomain() {
 		load_plugin_textdomain( 'aiwos-two-factor', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 	}
 
