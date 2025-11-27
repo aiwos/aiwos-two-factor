@@ -1,5 +1,9 @@
 == Changelog ==
 
+= 1.0 = 
+- Added translation.
+- Added .pot file.
+
 = 1.0-beta.2.0 =
 - Added changelog.
 
