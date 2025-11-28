@@ -11,6 +11,9 @@ msgstr ""
 "Language: nl\n"
 "Project-Id-Version: Plugins - Two-Factor - Stable (latest release)\n"
 
+msgid "Secret key is configured and registered. It is not possible to view it again for security reasons."
+msgstr "Geheime sleutel is geconfigureerd en geregistreerd. Om veiligheidsredenen is het niet mogelijk deze opnieuw te bekijken."
+
 #: class-two-factor-core.php:1866
 msgid "No providers are available for your account."
 msgstr "Er zijn geen providers beschikbaar voor je account."
