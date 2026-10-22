@@ -1,0 +1,13 @@
+parameters:
+	level: 6
+	phpVersion: 80229
+	paths:
+		- ./
+	scanDirectories:
+		- ../two-factor
+	excludePaths:
+	 - node_modules/*
+	 - lib/*
+	 - vendor/*
+	 - .github/*
+	 - .git/*

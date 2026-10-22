@@ -1,5 +1,13 @@
 == Changelog ==
 
+= 2.0.0 =
+- Rewritten from a customized copy of Two Factor into a small add-on on top of the upstream Two Factor plugin (0.17.0+). Two Factor itself is no longer patched, so upstream security releases install as-is. Requires upstream `two-factor` next to this plugin.
+- [two-factor-set-totp] shortcode: POST form, secret kept server-side until a code is proven, code recorded as used, TOTP primary, other sessions logged out.
+- Mandatory 2FA redirect to /2fa/ (replaces force-two-factor, same filter); built-in /2fa/ page when no page holds the shortcode.
+- Lost phone: one-time recovery codes on /2fa/ and a "Reset two-factor" row action on Users.
+- Mails the user on app link, new recovery codes and reset.
+- nl_NL translation, live-WordPress and browser tests.
+
 = 1.0 = 
 - Added translation.
 - Added .pot file.
