@@ -8,82 +8,47 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: aiwos-two-factor\n"
 
-#. translators: %s: minimum Two Factor version.
-msgid "Aiwos Two Factor is inactive: it needs the upstream Two Factor plugin, version %s or newer. Mandatory two-factor setup is NOT enforced."
-msgstr "Aiwos Frontend Two Factor is niet actief: de plugin Two Factor versie %s of nieuwer is nodig. Verplichte tweestapsverificatie wordt NIET afgedwongen."
+msgid "Two-factor authentication is required. Set it up or confirm your code first."
+msgstr "Tweestapsverificatie is verplicht. Stel deze in of bevestig eerst je code."
 
-msgid "Authenticator app QR code"
-msgstr "QR-code voor de authenticator-app"
+msgid "New recovery codes created"
+msgstr "Nieuwe herstelcodes aangemaakt"
 
-msgid "Can't scan the QR code? Enter this key in your app:"
-msgstr "Lukt scannen niet? Voer deze sleutel in de app in:"
+msgid "New two-factor recovery codes were just created for your account. Older codes no longer work."
+msgstr "Er zijn zojuist nieuwe herstelcodes voor tweestapsverificatie aangemaakt voor je account. Oudere codes werken niet meer."
 
-msgid "Code from the app"
-msgstr "Code uit de app"
+msgid "A new authenticator app was just linked to your account. The old app and your old recovery codes no longer work."
+msgstr "Er is zojuist een nieuwe authenticator-app aan je account gekoppeld. De oude app en je oude herstelcodes werken niet meer."
 
-msgid "Confirm code"
-msgstr "Code bevestigen"
+msgid "An authenticator app was just linked to your account for two-factor authentication."
+msgstr "Er is zojuist een authenticator-app aan je account gekoppeld voor tweestapsverificatie."
 
-msgid "Confirm your current two-factor code first."
-msgstr "Bevestig eerst je huidige verificatiecode."
-
-msgid "Open in authenticator app"
-msgstr "Openen in authenticator-app"
-
-msgid "Something went wrong while saving. Please try again."
-msgstr "Er ging iets mis bij het opslaan. Probeer het opnieuw."
-
-msgid "That code is not valid. Check the time on your phone and try again with a new code."
-msgstr "Deze code is niet geldig. Controleer de tijd op je telefoon en probeer het opnieuw met een nieuwe code."
-
-msgid "To link an authenticator app, first confirm your current two-factor code."
-msgstr "Bevestig eerst je huidige verificatiecode om een authenticator-app te koppelen."
-
-msgid "Two-factor authentication is now enabled."
-msgstr "Tweestapsverificatie is nu ingeschakeld."
-
-msgid "Verify and enable"
-msgstr "Controleren en inschakelen"
-
-msgid "Your authenticator app is linked to your account."
-msgstr "Je authenticator-app is gekoppeld aan je account."
-
-msgid "Your session expired. Please try again."
-msgstr "Je sessie is verlopen. Probeer het opnieuw."
-
-msgid "Two-factor authentication"
-msgstr "Tweestapsverificatie"
-
-msgid "Log out"
-msgstr "Uitloggen"
-
-msgid "Reset two-factor authentication for this user? They will be logged out and must link a new authenticator app at their next login."
-msgstr "Tweestapsverificatie voor deze gebruiker resetten? De gebruiker wordt uitgelogd en moet bij de volgende login een nieuwe authenticator-app koppelen."
-
-msgid "Reset two-factor"
-msgstr "Tweestapsverificatie resetten"
-
-msgid "You are not allowed to reset two-factor authentication for this user."
-msgstr "Je mag de tweestapsverificatie van deze gebruiker niet resetten."
-
-msgid "Two-factor authentication was reset"
-msgstr "Tweestapsverificatie is gereset"
-
-#. translators: 1: name of the person who reset it, 2: date and time.
-msgid "The two-factor authentication for your account was reset by %1$s on %2$s. At your next login you will be asked to link a new authenticator app. If you did not ask for this, contact us right away."
-msgstr "De tweestapsverificatie van je account is op %2$s gereset door %1$s. Bij je volgende login vragen we je een nieuwe authenticator-app te koppelen. Heb je hier niet om gevraagd? Neem dan direct contact met ons op."
-
-msgid "Two-factor authentication was reset. The user has been logged out."
-msgstr "Tweestapsverificatie is gereset. De gebruiker is uitgelogd."
+msgid "The recovery of your account is complete."
+msgstr "Het herstel van je account is afgerond."
 
 msgid "Authenticator app linked"
 msgstr "Authenticator-app gekoppeld"
 
-msgid "An authenticator app was just linked to your account for two-factor authentication. If this was not you, contact us right away."
-msgstr "Er is zojuist een authenticator-app aan je account gekoppeld voor tweestapsverificatie. Was jij dit niet? Neem dan direct contact met ons op."
+msgid "Your recovery link has expired. Contact your account manager for a new one."
+msgstr "Je herstellink is verlopen. Neem contact op met je accountbeheerder voor een nieuwe link."
 
-msgid "Your recovery codes. Store them somewhere safe (not on your phone). Each code works once, if you lose your authenticator app. They are shown only now; reloading this page creates new codes."
-msgstr "Je herstelcodes. Bewaar ze op een veilige plek (niet op je telefoon). Elke code werkt één keer, als je je authenticator-app kwijt bent. Je ziet ze alleen nu; als je deze pagina opnieuw laadt, worden er nieuwe codes gemaakt."
+msgid "Your two-factor authentication was reset. Open the link from the e-mail we sent you to link a new authenticator app."
+msgstr "Je tweestapsverificatie is gereset. Open de link uit de e-mail die we je stuurden om een nieuwe authenticator-app te koppelen."
+
+msgid "Your authenticator app is linked to your account."
+msgstr "Je authenticator-app is gekoppeld aan je account."
+
+msgid "To change it or create recovery codes, confirm your current code first."
+msgstr "Bevestig eerst je huidige code om de app te wijzigen of herstelcodes aan te maken."
+
+msgid "Replace authenticator app"
+msgstr "Authenticator-app vervangen"
+
+msgid "To link an authenticator app, confirm your current two-factor code first."
+msgstr "Bevestig eerst je huidige verificatiecode om een authenticator-app te koppelen."
+
+msgid "Cancel and keep the current app"
+msgstr "Annuleren en huidige app houden"
 
 msgid "Create recovery codes, so you can still log in if you lose your phone."
 msgstr "Maak herstelcodes aan, zodat je nog kunt inloggen als je je telefoon kwijtraakt."
@@ -94,14 +59,139 @@ msgstr "Nieuwe herstelcodes aanmaken"
 msgid "Create recovery codes"
 msgstr "Herstelcodes aanmaken"
 
-#. translators: %d: number of unused recovery codes.
+msgid "If this was not you, contact us right away."
+msgstr "Was jij dit niet? Neem dan direct contact met ons op."
+
+msgid "Aiwos Two Factor is inactive: it needs the upstream Two Factor plugin, version %s or newer. Mandatory two-factor setup is NOT enforced."
+msgstr "Aiwos Two Factor is niet actief: de plugin Two Factor versie %s of nieuwer is nodig. Verplichte tweestapsverificatie wordt NIET afgedwongen."
+
+msgid "Two-factor authentication"
+msgstr "Tweestapsverificatie"
+
+msgid "Log out"
+msgstr "Uitloggen"
+
+msgid "Link a new authenticator app"
+msgstr "Koppel een nieuwe authenticator-app"
+
+msgid "Reset two-factor"
+msgstr "Tweestapsverificatie resetten"
+
+msgid "User not found."
+msgstr "Gebruiker niet gevonden."
+
+msgid "Account: %s"
+msgstr "Account: %s"
+
+msgid "E-mail address or username"
+msgstr "E-mailadres of gebruikersnaam"
+
+msgid "This removes the authenticator app and recovery codes, logs the user out everywhere and mails them a one-time link to link a new app. Only do this after verifying the identity of the user through a known contact channel."
+msgstr "Dit verwijdert de authenticator-app en de herstelcodes, logt de gebruiker overal uit en mailt een eenmalige link om een nieuwe app te koppelen. Doe dit alleen nadat je de identiteit van de gebruiker hebt gecontroleerd via een bekend contactkanaal."
+
+msgid "How was the identity verified, and why?"
+msgstr "Hoe is de identiteit gecontroleerd, en waarom?"
+
+msgid "Also send a password reset mail (when the password may be compromised)"
+msgstr "Ook een mail sturen om het wachtwoord opnieuw in te stellen (als het wachtwoord mogelijk gelekt is)"
+
+msgid "To reset two-factor authentication for others, confirm your own code first."
+msgstr "Bevestig eerst je eigen code om tweestapsverificatie van anderen te resetten."
+
+msgid "Confirm code"
+msgstr "Code bevestigen"
+
+msgid "Two-factor authentication was reset. The user was logged out and received a link to link a new app."
+msgstr "Tweestapsverificatie is gereset. De gebruiker is uitgelogd en heeft een link ontvangen om een nieuwe app te koppelen."
+
+msgid "Two-factor authentication was reset, but the mail with the link could not be sent. Check the mail log and reset again to send a new link."
+msgstr "Tweestapsverificatie is gereset, maar de mail met de link kon niet worden verstuurd. Controleer het maillog en reset opnieuw om een nieuwe link te sturen."
+
+msgid "Fill in how the identity was verified."
+msgstr "Vul in hoe de identiteit is gecontroleerd."
+
+msgid "Confirm your own two-factor code first."
+msgstr "Bevestig eerst je eigen verificatiecode."
+
+msgid "You cannot reset your own two-factor authentication here."
+msgstr "Je kunt hier niet je eigen tweestapsverificatie resetten."
+
+msgid "Account not found, or you are not allowed to reset it."
+msgstr "Account niet gevonden, of je mag dit account niet resetten."
+
+msgid "Your session expired. Please try again."
+msgstr "Je sessie is verlopen. Probeer het opnieuw."
+
+msgid "Two-factor authentication is now enabled."
+msgstr "Tweestapsverificatie is nu ingeschakeld."
+
+msgid "Your new authenticator app is linked. The old app and old recovery codes no longer work."
+msgstr "Je nieuwe authenticator-app is gekoppeld. De oude app en oude herstelcodes werken niet meer."
+
+msgid "Scan the new QR code with your new app. Your current app keeps working until the new one is verified."
+msgstr "Scan de nieuwe QR-code met je nieuwe app. Je huidige app blijft werken tot de nieuwe is gecontroleerd."
+
+msgid "Nothing was changed."
+msgstr "Er is niets gewijzigd."
+
+msgid "Link accepted. Now link your new authenticator app."
+msgstr "Link geaccepteerd. Koppel nu je nieuwe authenticator-app."
+
+msgid "This link is not valid (any more). Contact your account manager for a new one."
+msgstr "Deze link is niet (meer) geldig. Neem contact op met je accountbeheerder voor een nieuwe link."
+
+msgid "Open the link from the e-mail first."
+msgstr "Open eerst de link uit de e-mail."
+
+msgid "That code is not valid. Enter the 6 digits from the app; check the time on your phone if it keeps failing."
+msgstr "Deze code is niet geldig. Vul de 6 cijfers uit de app in; controleer de tijd op je telefoon als het blijft mislukken."
+
+msgid "The setup took too long. Scan the new QR code and try again."
+msgstr "Het instellen duurde te lang. Scan de nieuwe QR-code en probeer het opnieuw."
+
+msgid "Confirm your current two-factor code first."
+msgstr "Bevestig eerst je huidige verificatiecode."
+
+msgid "Something went wrong. Please try again."
+msgstr "Er ging iets mis. Probeer het opnieuw."
+
+msgid "Your recovery codes. Store them somewhere safe (not on your phone). Each code works once, if you lose your authenticator app. They are shown only now; reloading this page creates new codes."
+msgstr "Je herstelcodes. Bewaar ze op een veilige plek (niet op je telefoon). Elke code werkt één keer, als je je authenticator-app kwijt bent. Je ziet ze alleen nu; als je deze pagina opnieuw laadt, worden er nieuwe codes gemaakt."
+
+msgid "Authenticator app QR code"
+msgstr "QR-code voor de authenticator-app"
+
+msgid "Open in authenticator app"
+msgstr "Openen in authenticator-app"
+
+msgid "Can't scan the QR code? Enter this key in your app:"
+msgstr "Lukt scannen niet? Voer deze sleutel in de app in:"
+
+msgid "Code from the app"
+msgstr "Code uit de app"
+
+msgid "Verify and enable"
+msgstr "Controleren en inschakelen"
+
+msgid "%1$s reset the two-factor authentication of your account on %2$s. You have been logged out everywhere.\n\nLog in with your password, then open this link to link a new authenticator app:\n%3$s\n\nThe link works once and expires in %4$d hours."
+msgstr "%1$s heeft op %2$s de tweestapsverificatie van je account gereset. Je bent overal uitgelogd.\n\nLog in met je wachtwoord en open daarna deze link om een nieuwe authenticator-app te koppelen:\n%3$s\n\nDe link werkt één keer en verloopt over %4$d uur."
+
 msgid "You have %d unused recovery code."
 msgid_plural "You have %d unused recovery codes."
 msgstr[0] "Je hebt nog %d ongebruikte herstelcode."
 msgstr[1] "Je hebt nog %d ongebruikte herstelcodes."
 
-msgid "New recovery codes created"
-msgstr "Nieuwe herstelcodes aangemaakt"
+msgid "Authenticator apps are switched off on this site. Contact the site administrator."
+msgstr "Authenticator-apps staan uit op deze site. Neem contact op met de beheerder van de site."
 
-msgid "New two-factor recovery codes were just created for your account. Older codes no longer work. If this was not you, contact us right away."
-msgstr "Er zijn zojuist nieuwe herstelcodes voor tweestapsverificatie aangemaakt voor je account. Oudere codes werken niet meer. Was jij dit niet? Neem dan direct contact met ons op."
+msgid "Continue to link a new authenticator app."
+msgstr "Ga verder om een nieuwe authenticator-app te koppelen."
+
+msgid "Continue"
+msgstr "Verder"
+
+msgid "Two-factor authentication was reset and the link was sent, but the password reset mail could not be sent. Ask the user to use \"Lost your password?\"."
+msgstr "Tweestapsverificatie is gereset en de link is verstuurd, maar de mail om het wachtwoord opnieuw in te stellen kon niet worden verstuurd. Vraag de gebruiker \"Wachtwoord vergeten?\" te gebruiken."
+
+msgid "Set up two-factor authentication for your own account first."
+msgstr "Stel eerst tweestapsverificatie in voor je eigen account."

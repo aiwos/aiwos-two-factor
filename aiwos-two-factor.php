@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Aiwos Two Factor
- * Description:       Frontend TOTP enrollment ([two-factor-set-totp]) and mandatory 2FA redirect on top of the upstream Two Factor plugin. Replaces the customized Two Factor fork and force-two-factor.
+ * Description:       Frontend authenticator setup, mandatory 2FA and account recovery on top of the upstream Two Factor plugin. Replaces the customized Two Factor fork and force-two-factor.
  * Version:           2.0.0
  * Requires at least: 7.0
  * Requires PHP:      8.1
@@ -16,11 +16,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-require_once __DIR__ . '/includes/class-plugin.php';
-require_once __DIR__ . '/includes/class-enrollment.php';
-require_once __DIR__ . '/includes/class-enforcer.php';
-require_once __DIR__ . '/includes/class-setup-page.php';
-require_once __DIR__ . '/includes/class-recovery.php';
+foreach ( array( 'plugin', 'account', 'notifier', 'recovery-token', 'view', 'enrollment', 'enforcer', 'setup-page', 'staff-reset' ) as $aiwos_two_factor_file ) {
+	require_once __DIR__ . '/includes/class-' . $aiwos_two_factor_file . '.php';
+}
 
 // After Two Factor (plugins_loaded, default priority) has defined its classes.
 add_action( 'plugins_loaded', array( Aiwos\TwoFactor\Plugin::class, 'boot' ), 20 );

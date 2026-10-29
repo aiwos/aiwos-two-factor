@@ -1,6 +1,6 @@
 <?php
 /**
- * Frontend TOTP enrollment on top of upstream Two Factor.
+ * Frontend authenticator setup, replacement and recovery codes on top of upstream Two Factor.
  *
  * @package Aiwos\TwoFactor
  */
@@ -15,9 +15,9 @@ use WP_User;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Shortcode with a plain POST form. Deliberately not upstream's REST/JS flow: our sites
- * lock the REST API down for non-admins, which is also why the old fork saved this way.
- * The secret is generated and kept server-side until the user proves a code.
+ * Plain POST forms, deliberately not upstream's REST/JS flow: our sites lock the REST API
+ * down for non-admins. Secrets are generated and kept server-side until a code proves them.
+ * Every change by a user who already has 2FA needs a recent second-factor proof.
  */
 final class Enrollment {
 
@@ -26,19 +26,14 @@ final class Enrollment {
 	 */
 	public const SHORTCODE = 'two-factor-set-totp';
 
-	/**
-	 * User meta holding the not-yet-confirmed secret.
-	 */
-	public const PENDING_KEY_META = '_aiwos_two_factor_pending_key';
-
 	public const STATUS_PARAM = 'aiwos-2fa';
 
-	private const PROVIDER             = 'Two_Factor_Totp';
-	private const NONCE_FIELD          = '_aiwos_two_factor_nonce';
-	private const RECOVERY_NONCE_FIELD = '_aiwos_two_factor_recovery_nonce';
+	private const NONCE_FIELD  = '_aiwos_two_factor_nonce';
+	private const ACTION_FIELD = 'aiwos_two_factor_action';
+	private const ACTIONS      = array( 'enroll', 'replace', 'cancel', 'recovery_codes', 'redeem' );
 
 	/**
-	 * Recovery codes generated in this request.
+	 * Recovery codes generated in this request; shown once, never stored in plain text.
 	 *
 	 * @var string[]
 	 */
@@ -55,114 +50,140 @@ final class Enrollment {
 	}
 
 	/**
-	 * On the page holding the shortcode: disable caching and process a submitted form.
+	 * On the setup page: no caching, redeem a recovery link, process a submitted form.
 	 */
 	public static function handle_request(): void {
 		$on_setup_page = Setup_Page::is_current();
 		if ( ! $on_setup_page && ( ! is_singular() || ! has_shortcode( (string) get_post_field( 'post_content', get_queried_object_id() ), self::SHORTCODE ) ) ) {
 			return;
 		}
+		View::no_cache();
+		$url = $on_setup_page ? Setup_Page::url() : (string) get_permalink( get_queried_object_id() );
 
-		self::no_cache();
-		if ( ! is_user_logged_in() ) {
-			return;
+		// phpcs:disable WordPress.Security.NonceVerification -- forms are verified in process().
+		if ( isset( $_GET[ Recovery_Token::QUERY_ARG ] ) && ! is_user_logged_in() ) {
+			// Log in first, without carrying the token into the login URL; the user then opens the link again.
+			wp_safe_redirect( wp_login_url( $url ) );
+			exit;
 		}
 
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in process() / process_recovery_codes().
-		if ( isset( $_POST[ self::RECOVERY_NONCE_FIELD ] ) ) {
-			// Shown once in this response; never stored or redirected.
-			self::$fresh_codes = self::process_recovery_codes( wp_get_current_user(), wp_unslash( $_POST ) );
+		if ( ! is_user_logged_in() || ! isset( $_POST[ self::ACTION_FIELD ] ) ) {
 			return;
 		}
-		if ( ! isset( $_POST[ self::NONCE_FIELD ] ) ) {
-			return;
-		}
-		$status = self::process( wp_get_current_user(), wp_unslash( $_POST ) );
+		$action = sanitize_key( wp_unslash( $_POST[ self::ACTION_FIELD ] ) );
+		$input  = wp_unslash( $_POST );
 		// phpcs:enable
 
-		$url = $on_setup_page ? Setup_Page::url() : get_permalink( get_queried_object_id() );
+		if ( 'recovery_codes' === $action ) {
+			// Shown once in this response; a redirect would have to store them.
+			self::$fresh_codes = self::process_recovery_codes( wp_get_current_user(), $input );
+			return;
+		}
+
+		$status = self::process( wp_get_current_user(), $action, $input );
 		wp_safe_redirect( add_query_arg( self::STATUS_PARAM, $status, $url ) );
 		exit;
 	}
 
 	/**
-	 * Replace the user's recovery codes. Needs a recent 2FA login, like other 2FA changes.
+	 * Handle a submitted form for the current user. Any user id in the input is ignored.
+	 *
+	 * @param WP_User              $user   Current user.
+	 * @param string               $action enroll, replace or cancel.
+	 * @param array<string, mixed> $input  Unslashed POST data.
+	 * @return string Status code for the message shown afterwards.
+	 */
+	public static function process( WP_User $user, string $action, array $input ): string {
+		if ( ! self::verify_nonce( $user, $action, $input ) ) {
+			return 'invalid_nonce';
+		}
+		if ( 'redeem' === $action ) {
+			$token = is_string( $input['token'] ?? null ) ? $input['token'] : '';
+			return Recovery_Token::redeem( $token ) ? 'recovery_ok' : 'recovery_invalid';
+		}
+		// During a staff recovery nothing changes before the mailed link was opened in this session.
+		if ( ! Recovery_Token::session_may_enroll() ) {
+			return 'recovery_required';
+		}
+		switch ( $action ) {
+			case 'enroll':
+				return self::enroll( $user, $input );
+			case 'replace':
+				if ( ! Account::has_authenticator( $user->ID ) ) {
+					return 'error';
+				}
+				if ( ! Account::has_recent_proof() ) {
+					return 'revalidate';
+				}
+				// The current app keeps working until the new one is proven.
+				Account::set_pending_secret( $user->ID, Two_Factor_Totp::generate_key() );
+				return 'replace_started';
+			case 'cancel':
+				Account::clear_pending_secret( $user->ID );
+				return 'cancelled';
+		}
+		return 'error';
+	}
+
+	/**
+	 * Replace the user's recovery codes. Needs a recent 2FA proof, like every 2FA change.
 	 *
 	 * @param WP_User              $user  Current user.
 	 * @param array<string, mixed> $input Unslashed POST data.
 	 * @return string[] Plain codes, empty when not allowed.
 	 */
 	public static function process_recovery_codes( WP_User $user, array $input ): array {
-		$nonce = $input[ self::RECOVERY_NONCE_FIELD ] ?? '';
-		if ( ! is_string( $nonce ) || ! wp_verify_nonce( $nonce, self::nonce_action( $user, 'recovery' ) ) ) {
+		$backup = Two_Factor_Core::get_providers()[ Account::BACKUP_CODES ] ?? null;
+		if ( ! self::verify_nonce( $user, 'recovery_codes', $input ) || ! $backup instanceof Two_Factor_Backup_Codes || ! Account::has_recent_proof() ) {
 			return array();
 		}
-		if ( ! Two_Factor_Core::is_user_using_two_factor( $user->ID ) || ! Two_Factor_Core::current_user_can_update_two_factor_options( 'save' ) ) {
-			return array();
-		}
-		return Recovery::generate_codes( $user );
+		$codes = $backup->generate_codes( $user, array( 'method' => 'replace' ) );
+		Two_Factor_Core::enable_provider_for_user( $user->ID, Account::BACKUP_CODES );
+		Notifier::inform( $user, __( 'New recovery codes created', 'aiwos-two-factor' ), __( 'New two-factor recovery codes were just created for your account. Older codes no longer work.', 'aiwos-two-factor' ) . ' ' . Notifier::not_you() );
+		return $codes;
 	}
 
 	/**
-	 * Validate a submitted code against the user's pending secret and enable TOTP.
-	 *
-	 * Always acts on $user; any user id in the input is ignored.
+	 * Prove the pending secret with a code from the app and make it the authenticator.
 	 *
 	 * @param WP_User              $user  Current user.
 	 * @param array<string, mixed> $input Unslashed POST data.
-	 * @return string Status: enrolled, invalid_nonce, already, revalidate, invalid_code, error.
 	 */
-	public static function process( WP_User $user, array $input ): string {
-		$nonce = $input[ self::NONCE_FIELD ] ?? '';
-		if ( ! is_string( $nonce ) || ! wp_verify_nonce( $nonce, self::nonce_action( $user ) ) ) {
-			return 'invalid_nonce';
-		}
-
-		$totp = self::provider();
-		if ( ! $totp ) {
-			return 'error';
-		}
-		if ( $totp->get_user_totp_key( $user->ID ) ) {
-			return 'already';
-		}
-		if ( Two_Factor_Core::is_user_using_two_factor( $user->ID ) && ! Two_Factor_Core::current_user_can_update_two_factor_options( 'save' ) ) {
+	private static function enroll( WP_User $user, array $input ): string {
+		if ( Two_Factor_Core::is_user_using_two_factor( $user->ID ) && ! Account::has_recent_proof() ) {
 			return 'revalidate';
 		}
-
-		$key  = (string) get_user_meta( $user->ID, self::PENDING_KEY_META, true );
+		$key = Account::pending_secret( $user->ID );
+		if ( null === $key || ! self::provider() ) {
+			return 'expired';
+		}
 		$code = is_string( $input['authcode'] ?? null ) ? preg_replace( '/\s+/', '', $input['authcode'] ) : '';
-		$tick = $totp->is_valid_key( $key ) ? Two_Factor_Totp::get_authcode_valid_ticktime( $key, $code ) : false;
+		// Exactly six digits: upstream derives the length from the input, so "1" would pass.
+		$tick = 1 === preg_match( '/^\d{6}$/', (string) $code ) ? Two_Factor_Totp::get_authcode_valid_ticktime( $key, $code ) : false;
 		if ( false === $tick ) {
 			return 'invalid_code';
 		}
 
-		if ( ! $totp->set_user_totp_key( $user->ID, $key ) || ! Two_Factor_Core::enable_provider_for_user( $user->ID, self::PROVIDER ) ) {
-			return 'error';
+		$replacing  = Account::has_authenticator( $user->ID );
+		$recovering = Recovery_Token::is_pending( $user->ID );
+		Account::commit_authenticator( $user->ID, $key, (int) $tick, $replacing );
+		Recovery_Token::complete( $user->ID );
+		if ( $recovering ) {
+			error_log( sprintf( '[aiwos-two-factor] staff recovery completed: user %d linked a new app', $user->ID ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- audit trail in the server log.
 		}
-
-		// Mark this code as used, so it cannot be replayed at the next login.
-		update_user_meta( $user->ID, Two_Factor_Totp::LAST_SUCCESSFUL_LOGIN_META_KEY, $tick );
-		delete_user_meta( $user->ID, self::PENDING_KEY_META );
-		update_user_meta( $user->ID, Two_Factor_Core::PROVIDER_USER_META_KEY, self::PROVIDER );
 		if ( get_current_user_id() === $user->ID ) {
-			// The user just proved a code: count this session as two-factor.
-			Two_Factor_Core::update_current_user_session(
-				array(
-					'two-factor-provider' => self::PROVIDER,
-					'two-factor-login'    => time(),
-				)
-			);
-			// Sessions opened before enrollment were password-only.
-			wp_destroy_other_sessions();
+			Account::secure_current_session();
 		}
 
-		Recovery::notify(
-			$user,
-			__( 'Authenticator app linked', 'aiwos-two-factor' ),
-			__( 'An authenticator app was just linked to your account for two-factor authentication. If this was not you, contact us right away.', 'aiwos-two-factor' )
-		);
+		$message = $replacing
+			? __( 'A new authenticator app was just linked to your account. The old app and your old recovery codes no longer work.', 'aiwos-two-factor' )
+			: __( 'An authenticator app was just linked to your account for two-factor authentication.', 'aiwos-two-factor' );
+		if ( $recovering ) {
+			$message .= ' ' . __( 'The recovery of your account is complete.', 'aiwos-two-factor' );
+		}
+		Notifier::inform( $user, __( 'Authenticator app linked', 'aiwos-two-factor' ), $message . ' ' . Notifier::not_you() );
 
-		return 'enrolled';
+		return $replacing ? 'replaced' : 'enrolled';
 	}
 
 	/**
@@ -170,88 +191,69 @@ final class Enrollment {
 	 */
 	public static function render(): string {
 		$user = wp_get_current_user();
-		$totp = self::provider();
-		if ( ! $user->exists() || ! $totp ) {
+		if ( ! $user->exists() ) {
 			return '';
 		}
+		$totp = self::provider();
+		if ( ! $totp ) {
+			return View::message( __( 'Authenticator apps are switched off on this site. Contact the site administrator.', 'aiwos-two-factor' ) );
+		}
+		// Also when rendered outside the setup page: the output can hold a secret.
+		View::no_cache();
+		$html = View::status_notice();
 
-		$notice = self::status_notice();
-
-		if ( $totp->get_user_totp_key( $user->ID ) ) {
-			return $notice . '<p class="aiwos-two-factor__done">' . esc_html__( 'Your authenticator app is linked to your account.', 'aiwos-two-factor' ) . '</p>' . self::render_recovery( $user );
+		if ( ! Recovery_Token::session_may_enroll() ) {
+			if ( Recovery_Token::is_expired( $user->ID ) ) {
+				return $html . View::message( __( 'Your recovery link has expired. Contact your account manager for a new one.', 'aiwos-two-factor' ) );
+			}
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only shown back in a POST form; redeemed after a nonce check.
+			$token = isset( $_GET[ Recovery_Token::QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ Recovery_Token::QUERY_ARG ] ) ) : '';
+			if ( Recovery_Token::is_well_formed( $token ) ) {
+				return $html . View::recovery_confirm( $token, self::nonce_action( $user, 'redeem' ), self::NONCE_FIELD, self::ACTION_FIELD );
+			}
+			return $html . View::message( __( 'Your two-factor authentication was reset. Open the link from the e-mail we sent you to link a new authenticator app.', 'aiwos-two-factor' ) );
 		}
 
-		if ( Two_Factor_Core::is_user_using_two_factor( $user->ID ) && ! Two_Factor_Core::current_user_can_update_two_factor_options( 'save' ) ) {
-			return $notice . sprintf(
-				'<p class="aiwos-two-factor__revalidate">%s <a href="%s">%s</a></p>',
-				esc_html__( 'To link an authenticator app, first confirm your current two-factor code.', 'aiwos-two-factor' ),
-				esc_url( Two_Factor_Core::get_user_two_factor_revalidate_url() ),
-				esc_html__( 'Confirm code', 'aiwos-two-factor' )
-			);
+		$linked  = Account::has_authenticator( $user->ID );
+		$proven  = Account::has_recent_proof();
+		$pending = Account::pending_secret( $user->ID );
+
+		if ( $linked && ! ( $pending && $proven ) ) {
+			$html .= View::message( __( 'Your authenticator app is linked to your account.', 'aiwos-two-factor' ) );
+			if ( ! $proven ) {
+				return $html . View::revalidate( __( 'To change it or create recovery codes, confirm your current code first.', 'aiwos-two-factor' ) );
+			}
+			return $html . View::codes( self::$fresh_codes )
+				. View::button( self::nonce_action( $user, 'replace' ), self::NONCE_FIELD, self::ACTION_FIELD, 'replace', __( 'Replace authenticator app', 'aiwos-two-factor' ) )
+				. self::render_recovery_codes( $user );
 		}
 
-		// Also when rendered outside the page itself (widget, template): the output holds a secret.
-		self::no_cache();
-
-		$key = (string) get_user_meta( $user->ID, self::PENDING_KEY_META, true );
-		if ( ! $totp->is_valid_key( $key ) ) {
-			$key = Two_Factor_Totp::generate_key();
-			update_user_meta( $user->ID, self::PENDING_KEY_META, $key );
+		if ( ! $linked && Two_Factor_Core::is_user_using_two_factor( $user->ID ) && ! $proven ) {
+			return $html . View::revalidate( __( 'To link an authenticator app, confirm your current two-factor code first.', 'aiwos-two-factor' ) );
 		}
-		$totp_url = Two_Factor_Totp::generate_qr_code_url( $user, $key );
 
-		// Upstream only registers its scripts in wp-admin; the QR script draws into #two-factor-qr-code a.
+		if ( null === $pending ) {
+			$pending = Two_Factor_Totp::generate_key();
+			Account::set_pending_secret( $user->ID, $pending );
+		}
 		$totp->enqueue_assets( '' );
-		wp_localize_script(
-			'two-factor-totp-qrcode',
-			'twoFactorTotpQrcode',
-			array(
-				'totpUrl'     => $totp_url,
-				'qrCodeLabel' => __( 'Authenticator app QR code', 'aiwos-two-factor' ),
-			)
-		);
-		wp_enqueue_script( 'two-factor-totp-qrcode' );
-
-		ob_start();
-		?>
-		<form method="post" class="aiwos-two-factor" action="<?php echo esc_url( remove_query_arg( self::STATUS_PARAM ) ); ?>" autocomplete="off">
-			<?php echo $notice; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in status_notice(). ?>
-			<p id="two-factor-qr-code"><a href="<?php echo esc_url( $totp_url, array( 'otpauth' ) ); ?>"><?php esc_html_e( 'Open in authenticator app', 'aiwos-two-factor' ); ?></a></p>
-			<p><?php esc_html_e( 'Can\'t scan the QR code? Enter this key in your app:', 'aiwos-two-factor' ); ?> <code><?php echo esc_html( $key ); ?></code></p>
-			<p>
-				<label for="aiwos-two-factor-authcode"><?php esc_html_e( 'Code from the app', 'aiwos-two-factor' ); ?></label>
-				<input type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" required name="authcode" id="aiwos-two-factor-authcode">
-			</p>
-			<?php wp_nonce_field( self::nonce_action( $user ), self::NONCE_FIELD ); ?>
-			<p><button type="submit"><?php esc_html_e( 'Verify and enable', 'aiwos-two-factor' ); ?></button></p>
-		</form>
-		<?php
-		return (string) ob_get_clean();
+		$html .= View::enroll_form( $user, $pending, self::nonce_action( $user, 'enroll' ), self::NONCE_FIELD, self::ACTION_FIELD );
+		if ( $linked ) {
+			$html .= View::button( self::nonce_action( $user, 'cancel' ), self::NONCE_FIELD, self::ACTION_FIELD, 'cancel', __( 'Cancel and keep the current app', 'aiwos-two-factor' ) );
+		}
+		return $html;
 	}
 
 	/**
-	 * Recovery codes: show freshly generated codes once, or offer to generate them.
+	 * Recovery codes section for a user with a linked app and a recent proof.
 	 *
 	 * @param WP_User $user Current user.
 	 */
-	private static function render_recovery( WP_User $user ): string {
-		if ( self::$fresh_codes ) {
-			$items = '';
-			foreach ( self::$fresh_codes as $code ) {
-				$items .= '<li><code>' . esc_html( $code ) . '</code></li>';
-			}
-			return sprintf(
-				'<div class="aiwos-two-factor__codes"><p><strong>%s</strong></p><ol>%s</ol></div>',
-				esc_html__( 'Your recovery codes. Store them somewhere safe (not on your phone). Each code works once, if you lose your authenticator app. They are shown only now; reloading this page creates new codes.', 'aiwos-two-factor' ),
-				$items
-			);
-		}
-
+	private static function render_recovery_codes( WP_User $user ): string {
 		// Recovery codes can be switched off site-wide in Two Factor; its class is then not loaded.
-		if ( ! class_exists( Two_Factor_Backup_Codes::class ) || ! Two_Factor_Core::current_user_can_update_two_factor_options( 'save' ) ) {
+		if ( self::$fresh_codes || ! class_exists( Two_Factor_Backup_Codes::class ) ) {
 			return '';
 		}
-
 		$remaining = Two_Factor_Backup_Codes::codes_remaining_for_user( $user );
 		$intro     = $remaining
 			? sprintf(
@@ -260,67 +262,37 @@ final class Enrollment {
 				$remaining
 			)
 			: __( 'Create recovery codes, so you can still log in if you lose your phone.', 'aiwos-two-factor' );
-
-		ob_start();
-		?>
-		<form method="post" class="aiwos-two-factor__recovery" action="<?php echo esc_url( remove_query_arg( self::STATUS_PARAM ) ); ?>">
-			<p><?php echo esc_html( $intro ); ?></p>
-			<?php wp_nonce_field( self::nonce_action( $user, 'recovery' ), self::RECOVERY_NONCE_FIELD ); ?>
-			<p><button type="submit"><?php echo $remaining ? esc_html__( 'Create new recovery codes', 'aiwos-two-factor' ) : esc_html__( 'Create recovery codes', 'aiwos-two-factor' ); ?></button></p>
-		</form>
-		<?php
-		return (string) ob_get_clean();
-	}
-
-	/**
-	 * Message for the status passed back after a submit.
-	 */
-	private static function status_notice(): string {
-		$messages = array(
-			'enrolled'      => __( 'Two-factor authentication is now enabled.', 'aiwos-two-factor' ),
-			'invalid_code'  => __( 'That code is not valid. Check the time on your phone and try again with a new code.', 'aiwos-two-factor' ),
-			'invalid_nonce' => __( 'Your session expired. Please try again.', 'aiwos-two-factor' ),
-			'revalidate'    => __( 'Confirm your current two-factor code first.', 'aiwos-two-factor' ),
-			'error'         => __( 'Something went wrong while saving. Please try again.', 'aiwos-two-factor' ),
-		);
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display only, value is whitelisted.
-		$status = isset( $_GET[ self::STATUS_PARAM ] ) ? sanitize_key( wp_unslash( $_GET[ self::STATUS_PARAM ] ) ) : '';
-		if ( ! isset( $messages[ $status ] ) ) {
-			return '';
-		}
-		$type = 'enrolled' === $status ? 'success' : 'error';
-		return sprintf( '<div class="feedback feedback-%s" role="status">%s</div>', esc_attr( $type ), esc_html( $messages[ $status ] ) );
-	}
-
-	/**
-	 * The page shows a secret: keep it out of browser and page caches.
-	 */
-	private static function no_cache(): void {
-		if ( ! headers_sent() ) {
-			nocache_headers();
-			send_frame_options_header();
-			header( 'Referrer-Policy: same-origin' );
-		}
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
+		$label = $remaining ? __( 'Create new recovery codes', 'aiwos-two-factor' ) : __( 'Create recovery codes', 'aiwos-two-factor' );
+		return View::message( $intro ) . View::button( self::nonce_action( $user, 'recovery_codes' ), self::NONCE_FIELD, self::ACTION_FIELD, 'recovery_codes', $label );
 	}
 
 	/**
 	 * Upstream TOTP provider instance, if registered.
 	 */
 	private static function provider(): ?Two_Factor_Totp {
-		$providers = Two_Factor_Core::get_providers();
-		return ( $providers[ self::PROVIDER ] ?? null ) instanceof Two_Factor_Totp ? $providers[ self::PROVIDER ] : null;
+		$provider = Two_Factor_Core::get_providers()[ Account::TOTP ] ?? null;
+		return $provider instanceof Two_Factor_Totp ? $provider : null;
 	}
 
 	/**
-	 * Nonce action bound to the user.
+	 * Verify the user-bound nonce of a form.
 	 *
-	 * @param WP_User $user User.
-	 * @param string  $what Form: enroll or recovery.
+	 * @param WP_User              $user   Current user.
+	 * @param string               $action Form action.
+	 * @param array<string, mixed> $input  Unslashed POST data.
 	 */
-	private static function nonce_action( WP_User $user, string $what = 'enroll' ): string {
-		return 'aiwos-two-factor-' . $what . '-' . $user->ID;
+	private static function verify_nonce( WP_User $user, string $action, array $input ): bool {
+		$nonce = $input[ self::NONCE_FIELD ] ?? '';
+		return in_array( $action, self::ACTIONS, true ) && is_string( $nonce ) && false !== wp_verify_nonce( $nonce, self::nonce_action( $user, $action ) );
+	}
+
+	/**
+	 * Nonce action bound to the user and form.
+	 *
+	 * @param WP_User $user   User.
+	 * @param string  $action Form action.
+	 */
+	private static function nonce_action( WP_User $user, string $action ): string {
+		return 'aiwos-two-factor-' . $action . '-' . $user->ID;
 	}
 }

@@ -21,19 +21,37 @@ final class Setup_Page {
 	public const SLUG = '2fa';
 
 	/**
+	 * Cached result of page(); false = not looked up yet.
+	 *
+	 * @var WP_Post|null|false
+	 */
+	private static $page = false;
+
+	/**
 	 * Register the fallback renderer.
 	 */
 	public static function register(): void {
 		add_action( 'template_redirect', array( self::class, 'maybe_render_fallback' ), 5 );
+		add_action( 'save_post_page', array( self::class, 'forget' ) );
 	}
 
 	/**
-	 * The published page with the setup slug, if any.
+	 * Drop the cached page after a page was saved.
+	 */
+	public static function forget(): void {
+		self::$page = false;
+	}
+
+	/**
+	 * The published page with the setup slug, if any (looked up once per request).
 	 */
 	public static function page(): ?WP_Post {
-		$page = get_page_by_path( self::SLUG );
-		// A "2fa" page without the form would leave users stuck: then use the built-in page.
-		return $page instanceof WP_Post && 'publish' === $page->post_status && has_shortcode( $page->post_content, Enrollment::SHORTCODE ) ? $page : null;
+		if ( false === self::$page ) {
+			$found = get_page_by_path( self::SLUG );
+			// A "2fa" page without the form would leave users stuck: then use the built-in page.
+			self::$page = $found instanceof WP_Post && 'publish' === $found->post_status && has_shortcode( $found->post_content, Enrollment::SHORTCODE ) ? $found : null;
+		}
+		return self::$page;
 	}
 
 	/**
@@ -45,23 +63,19 @@ final class Setup_Page {
 	}
 
 	/**
-	 * Whether the current request is the setup page (real or fallback).
+	 * Whether the current request is for the setup page. Works on the request path, so it
+	 * gives the same answer before WordPress has parsed the request (the early guards).
 	 */
 	public static function is_current(): bool {
-		$page = self::page();
-		if ( $page ) {
-			return is_page( $page->ID );
+		$request = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$target  = self::url();
+		$path    = static fn( string $url ): string => strtolower( trim( preg_replace( '#^/?index\.php(?=/)#', '', (string) wp_parse_url( $url, PHP_URL_PATH ) ), '/' ) );
+		if ( '' === $path( $target ) ) {
+			// Plain permalinks: /?page_id=123.
+			parse_str( (string) wp_parse_url( $target, PHP_URL_QUERY ), $query );
+			return isset( $query['page_id'], $_GET['page_id'] ) && (string) $query['page_id'] === sanitize_text_field( wp_unslash( $_GET['page_id'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only.
 		}
-
-		$path = (string) wp_parse_url( isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '', PHP_URL_PATH );
-		$home = trim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' );
-		$path = strtolower( trim( $path, '/' ) );
-		if ( '' !== $home ) {
-			$path = str_starts_with( $path, $home . '/' ) ? substr( $path, strlen( $home ) + 1 ) : $path;
-		}
-		// Plain permalinks: /index.php/2fa/.
-		$path = str_starts_with( $path, 'index.php/' ) ? substr( $path, strlen( 'index.php/' ) ) : $path;
-		return self::SLUG === $path;
+		return $path( $request ) === $path( $target );
 	}
 
 	/**

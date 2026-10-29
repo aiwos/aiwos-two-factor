@@ -1,10 +1,12 @@
 <?php
 /**
- * Remove unconfirmed secrets. Confirmed TOTP keys belong to Two Factor and stay.
+ * Remove this plugin's own data. Confirmed 2FA settings belong to Two Factor and stay.
  *
  * @package Aiwos\TwoFactor
  */
 
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
-delete_metadata( 'user', 0, '_aiwos_two_factor_pending_key', '', true );
+foreach ( array( '_aiwos_two_factor_pending', '_aiwos_two_factor_recovery' ) as $aiwos_two_factor_meta_key ) {
+	delete_metadata( 'user', 0, $aiwos_two_factor_meta_key, '', true );
+}

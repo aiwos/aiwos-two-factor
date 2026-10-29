@@ -1,232 +1,261 @@
 <?php
 /**
- * Live-WordPress tests for Aiwos Frontend Two Factor.
+ * Live-WordPress tests for Aiwos Two Factor.
  *
- * Run inside a host site with upstream Two Factor >= 0.17 active:
+ * Run inside a host site with upstream Two Factor >= 0.17 and this plugin active:
  *   ddev wp eval-file web/app/plugins/aiwos-two-factor/tests/run.php
+ * or everything (incl. disabled-provider runs): tests/run.sh.
  *
- * Creates throwaway users and removes them afterwards. Exits non-zero on failure.
- * The browser flow (redirects, real POST, login) lives in tests/e2e-enrollment.cjs.
+ * Creates throwaway users and removes them afterwards. Mails are captured, not sent.
  *
  * @package Aiwos\TwoFactor
  */
 
-// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.WP.GlobalVariablesOverride.Prohibited -- CLI test script.
+// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.WP.GlobalVariablesOverride.Prohibited, WordPress.Security.ValidatedSanitizedInput -- CLI test script.
 
+use Aiwos\TwoFactor\Account;
 use Aiwos\TwoFactor\Enforcer;
 use Aiwos\TwoFactor\Enrollment;
 use Aiwos\TwoFactor\Plugin;
-use Aiwos\TwoFactor\Recovery;
+use Aiwos\TwoFactor\Recovery_Token;
 use Aiwos\TwoFactor\Setup_Page;
+use Aiwos\TwoFactor\Staff_Reset;
 
-$failures = 0;
-$checks   = 0;
+require __DIR__ . '/bootstrap.php';
 
-$check = static function ( string $name, bool $ok ) use ( &$failures, &$checks ): void {
-	++$checks;
-	if ( ! $ok ) {
-		++$failures;
-	}
-	echo ( $ok ? 'PASS ' : 'FAIL ' ) . $name . "\n";
+$check = 'aiwos_tf_check';
+
+// POST payload for a form of the setup page.
+$form = static function ( WP_User $user, string $action, array $extra = array() ): array {
+	return array( '_aiwos_two_factor_nonce' => wp_create_nonce( 'aiwos-two-factor-' . $action . '-' . $user->ID ) ) + $extra;
 };
-
-$make_user = static function ( string $role ): int {
-	$login = 'aftf_test_' . $role . '_' . wp_generate_password( 6, false );
-	return (int) wp_insert_user(
-		array(
-			'user_login' => $login,
-			'user_pass'  => wp_generate_password( 24 ),
-			'user_email' => $login . '@example.invalid',
-			'role'       => $role,
-		)
-	);
-};
-
-// Log the user in with a real session token, as process() stamps the current session.
-$log_in = static function ( int $user_id ): void {
-	wp_set_current_user( $user_id );
-	$expiration                  = time() + HOUR_IN_SECONDS;
-	$token                       = WP_Session_Tokens::get_instance( $user_id )->create( $expiration );
-	$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $user_id, $expiration, 'logged_in', $token );
-};
-
-// Render the form (creates the pending secret) and return a POST payload for it.
-$form_input = static function ( int $user_id, ?string $code = null ): array {
+// Code for the user's pending secret (rendering the page creates it).
+$pending_code = static function ( WP_User $user ): string {
 	do_shortcode( '[two-factor-set-totp]' );
-	$key = (string) get_user_meta( $user_id, Enrollment::PENDING_KEY_META, true );
-	return array(
-		'_aiwos_two_factor_nonce' => wp_create_nonce( 'aiwos-two-factor-enroll-' . $user_id ),
-		'authcode'                => $code ?? ( $key ? Two_Factor_Totp::calc_totp( $key ) : '' ),
-	);
+	return Two_Factor_Totp::calc_totp( (string) Account::pending_secret( $user->ID ) );
 };
-
-$created = array();
-$mails   = array();
-add_filter(
-	'pre_wp_mail',
-	static function ( $short, $atts ) use ( &$mails ) {
-		$mails[] = $atts;
-		return true;
-	},
-	10,
-	2
-);
-$totp_provider = Two_Factor_Core::get_providers()['Two_Factor_Totp'];
 
 try {
-	// Bootstrap / version gate.
-	$check( 'plugin classes loaded', class_exists( Plugin::class ) );
-	$check( 'fork 0.13.0.2 is rejected', ! Plugin::is_supported_version( '0.13.0.2' ) );
-	$check( '0.16.0 is rejected', ! Plugin::is_supported_version( '0.16.0' ) );
-	$check( '0.17.0 is accepted', Plugin::is_supported_version( '0.17.0' ) );
+	// Bootstrap.
+	$check( 'fork 0.13.0.2 and 0.16 are rejected', ! Plugin::is_supported_version( '0.13.0.2' ) && ! Plugin::is_supported_version( '0.16.0' ) );
 	$check( 'running Two Factor is supported', Plugin::is_supported() );
-	$check( 'shortcode [two-factor-set-totp] registered', shortcode_exists( Enrollment::SHORTCODE ) );
+	$check( 'shortcodes registered', shortcode_exists( Enrollment::SHORTCODE ) && shortcode_exists( Staff_Reset::SHORTCODE ) );
 
-	// Rendering.
+	// Rendering and pending secret.
 	wp_set_current_user( 0 );
-	$check( 'shortcode renders nothing for visitors', '' === trim( do_shortcode( '[two-factor-set-totp]' ) ) );
-
-	$user_id   = $make_user( 'subscriber' );
-	$created[] = $user_id;
-	$log_in( $user_id );
+	$check( 'nothing rendered for visitors', '' === trim( do_shortcode( '[two-factor-set-totp]' ) ) );
+	$user = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_log_in( $user );
 	$html    = do_shortcode( '[two-factor-set-totp]' );
-	$pending = (string) get_user_meta( $user_id, Enrollment::PENDING_KEY_META, true );
-	$check( 'form posts with method=post', (bool) preg_match( '/<form method="post"/', $html ) );
-	$check( 'pending secret stored server-side', '' !== $pending );
-	$check( 'secret is not a form field', ! preg_match( '/<input[^>]+value="' . preg_quote( $pending, '/' ) . '"/', $html ) );
-	$check( 'QR script enqueued', wp_script_is( 'two-factor-totp-qrcode', 'enqueued' ) );
-	$check( 'secret is stable across renders', str_contains( do_shortcode( '[two-factor-set-totp]' ), $pending ) );
+	$pending = (string) Account::pending_secret( $user->ID );
+	$check( 'setup form posts', str_contains( $html, '<form method="post" class="aiwos-two-factor"' ) );
+	$check( 'pending secret kept server-side, not as form field', '' !== $pending && ! preg_match( '/<input[^>]+value="' . preg_quote( $pending, '/' ) . '"/', $html ) );
+	$check( 'secret stable across renders', str_contains( do_shortcode( '[two-factor-set-totp]' ), $pending ) );
+	update_user_meta( $user->ID, Account::PENDING_META, array( 'key' => $pending, 'created' => time() - Account::PENDING_TTL - 1 ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
+	$check( 'pending secret expires', null === Account::pending_secret( $user->ID ) && ! str_contains( do_shortcode( '[two-factor-set-totp]' ), $pending ) );
 
-	// Enforcer decision.
-	$user = get_userdata( $user_id );
-	$check( 'unenrolled user is redirected', Enforcer::should_redirect( $user, false ) );
-	$check( 'no redirect on the setup page itself', ! Enforcer::should_redirect( $user, true ) );
+	// P6: exactly six digits.
+	$code = $pending_code( $user );
+	foreach ( array(
+		''                    => 'empty',
+		substr( $code, 0, 1 ) => 'one digit',
+		substr( $code, 0, 5 ) => 'five digits',
+		$code . '0'           => 'seven digits',
+		'abcdef'              => 'letters',
+	) as $bad => $label ) {
+		$check( "code rejected: $label", 'invalid_code' === Enrollment::process( $user, 'enroll', $form( $user, 'enroll', array( 'authcode' => (string) $bad ) ) ) );
+	}
+	$check( 'bad nonce rejected', 'invalid_nonce' === Enrollment::process( $user, 'enroll', array( '_aiwos_two_factor_nonce' => 'x', 'authcode' => $code ) ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
+	$check( 'unknown action rejected', 'invalid_nonce' === Enrollment::process( $user, 'delete', $form( $user, 'delete' ) ) );
+	$check( 'rejections leave user without 2FA', ! Two_Factor_Core::is_user_using_two_factor( $user->ID ) );
+
+	// Enrollment.
+	$other_token = WP_Session_Tokens::get_instance( $user->ID )->create( time() + HOUR_IN_SECONDS );
+	$pending     = (string) Account::pending_secret( $user->ID );
+	$check(
+		'code with spaces accepted',
+		'enrolled' === Enrollment::process(
+			$user,
+			'enroll',
+			$form(
+				$user,
+				'enroll',
+				array(
+					'authcode' => chunk_split( Two_Factor_Totp::calc_totp( $pending ), 3, ' ' ),
+					'user_id'  => 1,
+				)
+			)
+		)
+	);
+	$check( 'authenticator linked and primary', Account::has_authenticator( $user->ID ) && 'Two_Factor_Totp' === Two_Factor_Core::get_primary_provider_for_user( $user->ID )->get_key() );
+	$check( 'enrollment code recorded as used', ! Two_Factor_Core::get_providers()['Two_Factor_Totp']->validate_code_for_user( $user, Two_Factor_Totp::calc_totp( $pending ) ) );
+	$check( 'session marked two-factor, other sessions logged out', Two_Factor_Core::is_current_user_session_two_factor() && null === WP_Session_Tokens::get_instance( $user->ID )->get( $other_token ) );
+	$check( 'enrollment mailed', 1 === count( aiwos_tf_mails_to( $user ) ) );
+	$check( 'linked user sees no setup form', ! str_contains( do_shortcode( '[two-factor-set-totp]' ), 'name="authcode"' ) );
+
+	// Recovery codes.
+	$codes = Enrollment::process_recovery_codes( $user, $form( $user, 'recovery_codes' ) );
+	$check( 'ten recovery codes', 10 === count( $codes ) && in_array( 'Two_Factor_Backup_Codes', Two_Factor_Core::get_enabled_providers_for_user( $user->ID ), true ) );
+	$backup = Two_Factor_Core::get_providers()['Two_Factor_Backup_Codes'];
+	$check( 'recovery code works once', $backup->validate_code( $user, $codes[0] ) && ! $backup->validate_code( $user, $codes[0] ) );
+	aiwos_tf_log_in( $user );
+	$check( 'recovery codes need a recent 2FA proof', array() === Enrollment::process_recovery_codes( $user, $form( $user, 'recovery_codes' ) ) );
+
+	// P5 / A2 / A3: replace the app after logging in with a recovery code.
+	aiwos_tf_log_in( $user, 'Two_Factor_Backup_Codes' );
+	$old_key = (string) get_user_meta( $user->ID, '_two_factor_totp_key', true );
+	$check( 'replace starts after recovery-code login', 'replace_started' === Enrollment::process( $user, 'replace', $form( $user, 'replace' ) ) );
+	$check( 'old app keeps working while replacing', Account::has_authenticator( $user->ID ) && get_user_meta( $user->ID, '_two_factor_totp_key', true ) === $old_key );
+	$check( 'cancel keeps the old app', 'cancelled' === Enrollment::process( $user, 'cancel', $form( $user, 'cancel' ) ) && null === Account::pending_secret( $user->ID ) && Account::has_authenticator( $user->ID ) );
+	Enrollment::process( $user, 'replace', $form( $user, 'replace' ) );
+	$html = do_shortcode( '[two-factor-set-totp]' );
+	$check( 'replacement shows setup form with cancel', str_contains( $html, 'name="authcode"' ) && str_contains( $html, 'aiwos-two-factor__cancel' ) );
+	$new_key = (string) Account::pending_secret( $user->ID );
+	$check( 'replacement with wrong code keeps old app', 'invalid_code' === Enrollment::process( $user, 'enroll', $form( $user, 'enroll', array( 'authcode' => Two_Factor_Totp::calc_totp( $old_key ) ) ) ) && get_user_meta( $user->ID, '_two_factor_totp_key', true ) === $old_key );
+	$check( 'replacement with new code succeeds', 'replaced' === Enrollment::process( $user, 'enroll', $form( $user, 'enroll', array( 'authcode' => Two_Factor_Totp::calc_totp( $new_key ) ) ) ) );
+	$check( 'old app replaced, old recovery codes invalid', get_user_meta( $user->ID, '_two_factor_totp_key', true ) === $new_key && ! $backup->validate_code( $user, $codes[1] ) && ! in_array( 'Two_Factor_Backup_Codes', Two_Factor_Core::get_enabled_providers_for_user( $user->ID ), true ) );
+	aiwos_tf_log_in( $user );
+	$check( 'replace needs a recent 2FA proof', 'revalidate' === Enrollment::process( $user, 'replace', $form( $user, 'replace' ) ) );
+
+	// P3: a stored secret with TOTP switched off is not a linked app.
+	$retained = aiwos_tf_user( 'subscriber' );
+	$old      = aiwos_tf_link_app( $retained );
+	update_user_meta( $retained->ID, '_two_factor_enabled_providers', array() );
+	aiwos_tf_log_in( $retained );
+	$check( 'retained secret: not linked, must enroll', ! Account::has_authenticator( $retained->ID ) && Enforcer::must_enroll( $retained ) );
+	$check( 'retained secret: setup form shown', str_contains( do_shortcode( '[two-factor-set-totp]' ), 'name="authcode"' ) );
+	$check( 'retained secret: old secret is not reactivated', 'invalid_code' === Enrollment::process( $retained, 'enroll', $form( $retained, 'enroll', array( 'authcode' => Two_Factor_Totp::calc_totp( $old ) ) ) ) );
+	$check( 'retained secret: fresh enrollment replaces it', 'enrolled' === Enrollment::process( $retained, 'enroll', $form( $retained, 'enroll', array( 'authcode' => $pending_code( $retained ) ) ) ) && get_user_meta( $retained->ID, '_two_factor_totp_key', true ) !== $old );
+	$email_user = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_link_app( $email_user );
+	update_user_meta( $email_user->ID, '_two_factor_enabled_providers', array( 'Two_Factor_Email' ) );
+	aiwos_tf_log_in( $email_user );
+	$check( 'other method + retained secret: revalidation required', 'revalidate' === Enrollment::process( $email_user, 'enroll', $form( $email_user, 'enroll', array( 'authcode' => '123456' ) ) ) && str_contains( do_shortcode( '[two-factor-set-totp]' ), 'aiwos-two-factor__revalidate' ) );
+
+	// P4: gates.
+	$fresh = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_log_in( $fresh );
+	$check( 'must enroll; administrators not exempt', Enforcer::must_enroll( $fresh ) && Enforcer::must_enroll( aiwos_tf_user( 'administrator' ) ) );
 	$opt_out = static fn() => false;
 	add_filter( Enforcer::CONDITION_FILTER, $opt_out );
-	$check( 'legacy condition filter can opt out', ! Enforcer::should_redirect( $user, false ) );
+	$check( 'condition filter exempts', ! Enforcer::must_enroll( $fresh ) );
 	remove_filter( Enforcer::CONDITION_FILTER, $opt_out );
+	$check( 'REST blocked for user without 2FA', is_wp_error( Enforcer::guard_rest( null ) ) && 403 === Enforcer::guard_rest( null )->get_error_data()['status'] );
+	$check( 'REST keeps earlier errors', 'earlier' === Enforcer::guard_rest( new WP_Error( 'earlier' ) )->get_error_code() );
+	aiwos_tf_link_app( $fresh );
+	$check( 'password-only session of a 2FA user must revalidate', Enforcer::must_revalidate() && is_wp_error( Enforcer::guard_rest( null ) ) );
+	aiwos_tf_log_in( $fresh, 'Two_Factor_Totp' );
+	$check( '2FA session passes', ! Enforcer::must_revalidate() && null === Enforcer::guard_rest( null ) );
+	$check(
+		'XML-RPC login of user without 2FA blocked',
+		( static function () {
+			$u = aiwos_tf_user( 'subscriber' );
+			define( 'XMLRPC_REQUEST', true );
+			return is_wp_error( Enforcer::guard_xmlrpc( $u ) );
+		} )()
+	);
 
-	$admin_id  = $make_user( 'administrator' );
-	$created[] = $admin_id;
-	$check( 'administrators are not exempt', Enforcer::should_redirect( get_userdata( $admin_id ), false ) );
+	// B1: staff reset authorisation.
+	$manager = aiwos_tf_user( 'subscriber', array( 'edit_users', 'list_users', Staff_Reset::CAP ) );
+	$target  = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_link_app( $target );
+	aiwos_tf_log_in( aiwos_tf_user( 'subscriber', array( 'edit_users' ) ), 'Two_Factor_Totp' );
+	$check( 'edit_users without the capability: not allowed', 'not_allowed' === Staff_Reset::check( $target ) );
+	aiwos_tf_log_in( $manager );
+	$check( 'manager without own 2FA: told to set it up', 'own_2fa_required' === Staff_Reset::check( $target ) );
+	aiwos_tf_link_app( $manager );
+	aiwos_tf_log_in( $manager );
+	$check( 'manager with 2FA but password-only session: revalidate', 'revalidate' === Staff_Reset::check( $target ) );
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	$check( 'manager with recent 2FA: allowed for a regular user', '' === Staff_Reset::check( $target ) );
+	Two_Factor_Core::update_current_user_session( array( 'two-factor-login' => time() - 11 * MINUTE_IN_SECONDS ) );
+	$check( 'staff proof older than 10 minutes: revalidate', 'revalidate' === Staff_Reset::check( $target ) );
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	$check( 'manager cannot reset self, administrators or other managers', 'self' === Staff_Reset::check( $manager ) && 'not_allowed' === Staff_Reset::check( aiwos_tf_user( 'administrator' ) ) && 'not_allowed' === Staff_Reset::check( aiwos_tf_user( 'subscriber', array( Staff_Reset::CAP ) ) ) );
+	$deny = static fn() => false;
+	add_filter( 'aiwos/two-factor/can-reset', $deny );
+	$check( 'can-reset filter has the final say', 'not_allowed' === Staff_Reset::check( $target ) );
+	remove_filter( 'aiwos/two-factor/can-reset', $deny );
+	$admin = aiwos_tf_user( 'administrator' );
+	aiwos_tf_link_app( $admin );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	$check( 'administrator gets the capability and may reset a manager', current_user_can( Staff_Reset::CAP ) && '' === Staff_Reset::check( $manager ) );
 
-	// Rejections change nothing.
-	$input                            = $form_input( $user_id );
-	$input['_aiwos_two_factor_nonce'] = 'bad';
-	$array_input                      = $form_input( $user_id );
-	$array_input['authcode']          = array( 'x' );
-	$check( 'array authcode is rejected cleanly', 'invalid_code' === Enrollment::process( $user, $array_input ) );
-	$check( 'bad nonce is rejected', 'invalid_nonce' === Enrollment::process( $user, $input ) );
-	$wrong = '000000' === Two_Factor_Totp::calc_totp( $pending ) ? '111111' : '000000';
-	$check( 'wrong code is rejected', 'invalid_code' === Enrollment::process( $user, $form_input( $user_id, $wrong ) ) );
-	$check( 'rejections leave user unenrolled', ! Two_Factor_Core::is_user_using_two_factor( $user_id ) );
+	// B3: staff reset puts the account in recovery.
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	$target_token = WP_Session_Tokens::get_instance( $target->ID )->create( time() + HOUR_IN_SECONDS );
+	WP_Application_Passwords::create_new_application_password( $target->ID, array( 'name' => 'aftf-test' ) );
+	add_action(
+		'aiwos/two-factor/recovery-started',
+		static function ( $t, $a, $r ) {
+			$GLOBALS['aiwos_tf_test']['actions'][] = array( $t->ID, $a->ID, $r );
+		},
+		10,
+		3
+	);
+	$check( 'reason is required', 'reason_required' === Staff_Reset::start_recovery( $target, '  ', false ) );
+	$mails_before = count( aiwos_tf_mails_to( $target ) );
+	$check( 'recovery started', 'started' === Staff_Reset::start_recovery( $target, 'Called back on known number', true ) );
+	$check( 'target logged out, app passwords revoked', null === WP_Session_Tokens::get_instance( $target->ID )->get( $target_token ) && array() === WP_Application_Passwords::get_user_application_passwords( $target->ID ) );
+	$check( 'target 2FA removed', ! Two_Factor_Core::is_user_using_two_factor( $target->ID ) && '' === get_user_meta( $target->ID, '_two_factor_totp_key', true ) );
+	$check( 'audit hook gets target, actor, reason', array( $target->ID, $manager->ID, 'Called back on known number' ) === end( $GLOBALS['aiwos_tf_test']['actions'] ) );
+	$sent = array_slice( aiwos_tf_mails_to( $target ), $mails_before );
+	$check( 'recovery link and password reset mailed', 2 === count( $sent ) && preg_match( '/' . Recovery_Token::QUERY_ARG . '=([0-9a-f]{64})/', (string) $sent[0]['message'], $m ) );
+	$token = $m[1] ?? '';
+	$check( 'token not stored in plain text', ! str_contains( (string) wp_json_encode( get_user_meta( $target->ID, Recovery_Token::META, true ) ), $token ) );
 
-	// Valid enrollment.
-	$input = $form_input( $user_id ) + array( 'user_id' => $admin_id );
-	$check( 'valid code enrolls', 'enrolled' === Enrollment::process( $user, $input ) );
-	$primary = Two_Factor_Core::get_primary_provider_for_user( $user_id );
-	$check( 'TOTP is primary', $primary && 'Two_Factor_Totp' === $primary->get_key() );
-	$check( 'confirmed key equals the pending key', get_user_meta( $user_id, '_two_factor_totp_key', true ) === $pending );
-	$check( 'enrollment code recorded as used', (int) get_user_meta( $user_id, Two_Factor_Totp::LAST_SUCCESSFUL_LOGIN_META_KEY, true ) > 0 );
-	$check( 'enrollment code cannot be replayed at login', ! $totp_provider->validate_code_for_user( get_userdata( $user_id ), Two_Factor_Totp::calc_totp( $pending ) ) );
-	$check( 'pending secret removed', '' === get_user_meta( $user_id, Enrollment::PENDING_KEY_META, true ) );
-	$check( 'session marked two-factor', Two_Factor_Core::is_current_user_session_two_factor() );
-	$check( 'user_id in input is ignored', ! Two_Factor_Core::is_user_using_two_factor( $admin_id ) );
-	$check( 'enrolled user is not redirected', ! Enforcer::should_redirect( get_userdata( $user_id ), false ) );
-	$check( 'enrollment mails the user', 1 === count( array_filter( $mails, static fn( $m ) => $m['to'] === $user->user_email ) ) );
-	$check( 'second submit does not overwrite', 'already' === Enrollment::process( $user, $form_input( $user_id, '123456' ) ) );
-	$check( 'enrolled user sees no enrollment form', ! str_contains( do_shortcode( '[two-factor-set-totp]' ), 'name="authcode"' ) );
+	// B3: the password alone cannot claim the account.
+	aiwos_tf_log_in( $target );
+	$check( 'password-only: must enroll but setup is locked', Enforcer::must_enroll( $target ) && ! Recovery_Token::session_may_enroll() && ! str_contains( do_shortcode( '[two-factor-set-totp]' ), 'name="authcode"' ) );
+	$check( 'password-only: enrolling refused', 'recovery_required' === Enrollment::process( $target, 'enroll', $form( $target, 'enroll', array( 'authcode' => '123456' ) ) ) );
+	add_filter( Enforcer::CONDITION_FILTER, $opt_out );
+	$check( 'pending recovery is never exempt', Enforcer::must_enroll( $target ) );
+	remove_filter( Enforcer::CONDITION_FILTER, $opt_out );
+	$check( 'replace and cancel refused before the link', 'recovery_required' === Enrollment::process( $target, 'replace', $form( $target, 'replace' ) ) && 'recovery_required' === Enrollment::process( $target, 'cancel', $form( $target, 'cancel' ) ) );
+	$check( 'link page shows a confirm button, not the setup form', ( static function () use ( $token ) {
+		$_GET[ Recovery_Token::QUERY_ARG ] = $token;
+		$html                              = do_shortcode( '[two-factor-set-totp]' );
+		unset( $_GET[ Recovery_Token::QUERY_ARG ] );
+		return str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' );
+	} )() );
+	$check( 'wrong token refused', 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => str_repeat( '0', 64 ) ) ) ) );
+	$check( 'redeem needs a nonce', 'invalid_nonce' === Enrollment::process( $target, 'redeem', array( 'token' => $token ) ) );
+	$check( 'right token accepted once', 'recovery_ok' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) ) && ! Recovery_Token::redeem( $token ) );
+	$check( 'session with the link may enroll', Recovery_Token::session_may_enroll() );
+	$check( 'enrollment completes the recovery', 'enrolled' === Enrollment::process( $target, 'enroll', $form( $target, 'enroll', array( 'authcode' => $pending_code( $target ) ) ) ) && ! Recovery_Token::is_pending( $target->ID ) );
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	Staff_Reset::start_recovery( $target, 'Expiry test', false );
+	$state            = get_user_meta( $target->ID, Recovery_Token::META, true );
+	$state['expires'] = time() - 1;
+	update_user_meta( $target->ID, Recovery_Token::META, $state );
+	aiwos_tf_log_in( $target );
+	$check( 'expired recovery cannot be redeemed', Recovery_Token::is_expired( $target->ID ) && ! Recovery_Token::session_may_enroll() );
 
-	// Recovery codes (session was stamped two-factor at enrollment).
-	$recovery_input = array( '_aiwos_two_factor_recovery_nonce' => wp_create_nonce( 'aiwos-two-factor-recovery-' . $user_id ) );
-	$check( 'recovery codes need a valid nonce', array() === Enrollment::process_recovery_codes( $user, array( '_aiwos_two_factor_recovery_nonce' => 'bad' ) ) );
-	$codes = Enrollment::process_recovery_codes( $user, $recovery_input );
-	$check( 'ten recovery codes generated', 10 === count( $codes ) );
-	$check( 'recovery codes enabled as login method', in_array( Recovery::BACKUP_PROVIDER, Two_Factor_Core::get_enabled_providers_for_user( $user_id ), true ) );
-	$check( 'TOTP stays primary after recovery codes', 'Two_Factor_Totp' === Two_Factor_Core::get_primary_provider_for_user( $user_id )->get_key() );
-	$backup = Two_Factor_Core::get_providers()[ Recovery::BACKUP_PROVIDER ];
-	$check( 'a recovery code logs in once', $backup->validate_code( $user, $codes[0] ) && ! $backup->validate_code( $user, $codes[0] ) );
+	// A1: password reset keeps 2FA and ends old sessions.
+	$pw_user = aiwos_tf_user( 'subscriber' );
+	$pw_key  = aiwos_tf_link_app( $pw_user );
+	aiwos_tf_log_in( $pw_user, 'Two_Factor_Totp' );
+	$cookie = $_COOKIE[ LOGGED_IN_COOKIE ];
+	reset_password( $pw_user, wp_generate_password( 24 ) );
+	clean_user_cache( $pw_user->ID );
+	$check( 'password reset keeps the app', Account::has_authenticator( $pw_user->ID ) && get_user_meta( $pw_user->ID, '_two_factor_totp_key', true ) === $pw_key );
+	$check( 'password reset ends old browser logins', false === wp_validate_auth_cookie( $cookie, 'logged_in' ) );
 
-	// Staff reset.
-	wp_set_current_user( $admin_id );
-	$check( 'reset link shown for another user', isset( Recovery::add_reset_link( array(), $user )['aiwos-reset-2fa'] ) );
-	$check( 'no reset link for yourself', ! isset( Recovery::add_reset_link( array(), get_userdata( $admin_id ) )['aiwos-reset-2fa'] ) );
-	$plain_id  = $make_user( 'subscriber' );
-	$created[] = $plain_id;
-	$check( 'no reset link for user without 2FA', ! isset( Recovery::add_reset_link( array(), get_userdata( $plain_id ) )['aiwos-reset-2fa'] ) );
-	WP_Application_Passwords::create_new_application_password( $user_id, array( 'name' => 'aftf-test' ) );
-	$editor_like = $make_user( 'subscriber' );
-	$created[]   = $editor_like;
-	get_userdata( $editor_like )->add_cap( 'edit_users' );
-	wp_set_current_user( $editor_like );
-	$check( 'user manager cannot reset an administrator', ! Recovery::can_reset( get_userdata( $admin_id ) ) );
-	$check( 'user manager can reset a regular user', Recovery::can_reset( $user ) );
-	wp_set_current_user( $admin_id );
-	$mails_before = count( $mails );
-	$codes_again  = Recovery::generate_codes( $user );
-	$check( 'new recovery codes are mailed', count( $mails ) === $mails_before + 1 );
-	Recovery::reset_user( $user );
-	$check( 'reset revokes application passwords', array() === WP_Application_Passwords::get_user_application_passwords( $user_id ) );
-	$check( 'reset removes 2FA', ! Two_Factor_Core::is_user_using_two_factor( $user_id ) && '' === get_user_meta( $user_id, '_two_factor_totp_key', true ) );
-	$check( 'reset removes recovery codes', 0 === Two_Factor_Backup_Codes::codes_remaining_for_user( $user ) );
-	$check( 'reset logs the user out everywhere', array() === WP_Session_Tokens::get_instance( $user_id )->get_all() );
-	$check( 'reset user is sent to /2fa/ again', Enforcer::should_redirect( get_userdata( $user_id ), false ) );
-	$subscriber_id = $make_user( 'subscriber' );
-	$created[]     = $subscriber_id;
-	wp_set_current_user( $subscriber_id );
-	$check( 'subscriber gets no reset link', ! isset( Recovery::add_reset_link( array(), get_userdata( $admin_id ) )['aiwos-reset-2fa'] ) );
-
-	// Setup page: built-in fallback when no "2fa" page exists.
+	// Setup page fallback.
 	$real_page = Setup_Page::page();
 	if ( $real_page ) {
-		wp_update_post(
-			array(
-				'ID'          => $real_page->ID,
-				'post_status' => 'draft',
-			)
-		);
+		wp_update_post( array( 'ID' => $real_page->ID, 'post_status' => 'draft' ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
 	}
-	$check( 'fallback setup URL is /2fa/', home_url( '/2fa/' ) === Setup_Page::url() );
-	$_SERVER['REQUEST_URI'] = '/2fa/?utm=x';
-	$check( 'fallback /2fa/ recognised with query string', Setup_Page::is_current() );
+	$_SERVER['REQUEST_URI'] = '/2FA/?utm=x';
+	$check( 'fallback /2fa/ recognised (case, query string)', home_url( '/2fa/' ) === Setup_Page::url() && Setup_Page::is_current() );
 	$_SERVER['REQUEST_URI'] = '/2fa-other/';
 	$check( 'other paths are not the setup page', ! Setup_Page::is_current() );
 	if ( $real_page ) {
-		wp_update_post(
-			array(
-				'ID'          => $real_page->ID,
-				'post_status' => 'publish',
-			)
-		);
-		$check( 'real page wins when published', get_permalink( $real_page ) === Setup_Page::url() );
+		wp_update_post( array( 'ID' => $real_page->ID, 'post_status' => 'publish' ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
+		$check( 'real page with the shortcode wins', get_permalink( $real_page ) === Setup_Page::url() );
+		$_SERVER['REQUEST_URI'] = (string) wp_parse_url( get_permalink( $real_page ), PHP_URL_PATH ) . '?x=1';
+		$check( 'real page recognised by path', Setup_Page::is_current() );
 	}
-
-	// User on email codes without a recent 2FA login must revalidate first.
-	$email_user = $make_user( 'subscriber' );
-	$created[]  = $email_user;
-	Two_Factor_Core::enable_provider_for_user( $email_user, 'Two_Factor_Email' );
-	$log_in( $email_user );
-	$check( 'email user without recent 2FA sees revalidate link', str_contains( do_shortcode( '[two-factor-set-totp]' ), 'aiwos-two-factor__revalidate' ) );
-	$check( 'email user without recent 2FA cannot enroll', 'revalidate' === Enrollment::process( get_userdata( $email_user ), $form_input( $email_user ) ) );
-
-	// Existing fork-made TOTP links keep working (same meta keys as upstream).
-	$legacy    = $make_user( 'subscriber' );
-	$created[] = $legacy;
-	$key       = Two_Factor_Totp::generate_key();
-	update_user_meta( $legacy, '_two_factor_totp_key', $key );
-	update_user_meta( $legacy, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY, array( 'Two_Factor_Totp' ) );
-	update_user_meta( $legacy, Two_Factor_Core::PROVIDER_USER_META_KEY, 'Two_Factor_Totp' );
-	$check( 'fork-made TOTP link counts as enrolled', Two_Factor_Core::is_user_using_two_factor( $legacy ) );
-	$check( 'fork-made TOTP key validates a fresh code', Two_Factor_Totp::is_valid_authcode( $key, Two_Factor_Totp::calc_totp( $key ) ) );
 } finally {
-	require_once ABSPATH . 'wp-admin/includes/user.php';
-	foreach ( $created as $id ) {
-		wp_delete_user( $id );
-	}
-	wp_set_current_user( 0 );
-}
-
-echo "\n{$checks} checks, {$failures} failed\n";
-if ( $failures > 0 ) {
-	exit( 1 );
+	aiwos_tf_finish();
 }

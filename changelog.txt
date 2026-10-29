@@ -1,12 +1,14 @@
 == Changelog ==
 
 = 2.0.0 =
-- Rewritten from a customized copy of Two Factor into a small add-on on top of the upstream Two Factor plugin (0.17.0+). Two Factor itself is no longer patched, so upstream security releases install as-is. Requires upstream `two-factor` next to this plugin.
-- [two-factor-set-totp] shortcode: POST form, secret kept server-side until a code is proven, code recorded as used, TOTP primary, other sessions logged out.
-- Mandatory 2FA redirect to /2fa/ (replaces force-two-factor, same filter); built-in /2fa/ page when no page holds the shortcode.
-- Lost phone: one-time recovery codes on /2fa/ and a "Reset two-factor" row action on Users.
-- Mails the user on app link, new recovery codes and reset.
-- nl_NL translation, live-WordPress and browser tests.
+- Rewritten from a customized copy of Two Factor into an add-on on top of the upstream Two Factor plugin (0.17.0+). Two Factor itself is no longer patched; install upstream `two-factor` next to this plugin. Replaces force-two-factor.
+- [two-factor-set-totp]: POST form, secret kept server-side (expires after 30 minutes) until a 6-digit code proves it; code recorded as used; TOTP primary; other sessions logged out. A secret kept while TOTP is off is never reactivated.
+- Replace authenticator app on /2fa/ after a recent second-factor proof (a recovery-code login counts); old app and old recovery codes stop working.
+- One-time recovery codes on /2fa/.
+- Staff-assisted recovery (capability aiwos_reset_two_factor, recent 2FA of the staff member, scoped targets, required verification note): revokes sessions and application passwords, clears 2FA data with any provider switched off, and mails a single-use 24-hour link; the password alone cannot link a new app. Available in wp-admin and as [two-factor-staff-reset].
+- Mandatory 2FA on frontend, wp-admin, admin-ajax, admin-post, REST and XML-RPC; sessions not opened with 2FA must revalidate. Built-in /2fa/ page when no page holds the shortcode.
+- Mails on app link, replacement, new recovery codes and staff recovery; audit hook aiwos/two-factor/recovery-started.
+- nl_NL translation; live-WordPress tests (incl. disabled providers) and browser tests.
 
 = 1.0 = 
 - Added translation.

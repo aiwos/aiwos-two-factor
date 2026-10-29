@@ -32,7 +32,7 @@ final class Plugin {
 		Enrollment::register();
 		Enforcer::register();
 		Setup_Page::register();
-		Recovery::register();
+		Staff_Reset::register();
 	}
 
 	/**
