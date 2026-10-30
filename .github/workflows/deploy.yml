@@ -1,63 +1,29 @@
 name: Deploy
 
-# Run deploy only on tag and master builds.t
+# Attach the plugin zip to every published release. The top-level folder must be
+# "aiwos-two-factor" (the package slug).
 on:
-  push:
-    branches:
-      - master
   release:
     types: [published]
 
-jobs:
+permissions:
+  contents: write
 
+jobs:
   deploy:
     name: Create release asset
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v3
-        with:
-          cache: 'npm'
-          node-version-file: '.nvmrc'
-
-      - name: Setup PHP and Composer
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '5.6'
-          tools: composer:v2
-
-      - name: Install NPM dependencies
-        run: npm install
-
-      - name: Copy qrcode.js to includes/qrcode-generator
+      - name: Build zip
         run: |
-          mkdir -p includes/qrcode-generator
-          cp node_modules/qrcode-generator/qrcode.js includes/qrcode-generator/
-
-      - name: Prepare for artifact creation
-        run: |
-             rm -rf node_modules
-             mkdir aiwos-two-factor
-             rsync -a ./ ./aiwos-two-factor --exclude aiwos-two-factor --exclude vendor --exclude includes/BaconQrCode
-             mkdir build
-
-      - name: Create artifact
-        uses: montudor/action-zip@v1
-        with:
-          args: zip -X -r build/aiwos-two-factor-${{ github.event.release.tag_name }}.zip aiwos-two-factor -x *.git* *node_modules/\* .* "*/\.*" *CODE_OF_CONDUCT.md *readme-dev.md *.phar *appsero.json *CONTRIBUTING.md *ISSUE_TEMPLATE.md *PULL_REQUEST_TEMPLATE.md *.dist *.neon *composer* *package* *phpunit* *webpack* *tests** *Gruntfile.js *SECURITY.md *readme.md *vendor/\** *includes/BaconQrCode/\**
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: aiwos-two-factor
-          path: build/aiwos-two-factor-${{ github.event.release.tag_name }}.zip
+          mkdir -p build/aiwos-two-factor
+          rsync -a ./ build/aiwos-two-factor/ --exclude build --exclude .git --exclude .github --exclude tests --exclude phpcs.xml --exclude phpstan.neon --exclude .gitignore --exclude .wp-env.json
+          cd build && zip -X -r "aiwos-two-factor-${{ github.event.release.tag_name }}.zip" aiwos-two-factor
 
       - name: Upload release asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: build/aiwos-two-factor-${{ github.event.release.tag_name }}.zip
-        env:
-          GITHUB_TOKEN: ${{ github.token }}

@@ -1,16 +1,6 @@
 {
-  "core": "WordPress/WordPress",
-  "phpVersion": "8.1",
-  "plugins": [ "." ],
-  "env": {
-    "tests": {
-      "config": {
-        "WP_DEBUG": true,
-        "WP_TESTS_EMAIL": "admin@example.org",
-        "WP_TESTS_DOMAIN": "example.org",
-        "WP_SITEURL": "https://example.org",
-        "WP_HOME": "https://example.org"
-      }
-    }
-  }
+	"plugins": [
+		"https://downloads.wordpress.org/plugin/two-factor.0.17.0.zip",
+		"."
+	]
 }

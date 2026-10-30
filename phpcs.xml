@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="icalender" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/squizlabs/PHP_CodeSniffer/master/phpcs.xsd">
+    <!-- <rule ref="wordpress" /> -->
+    <!-- <arg name='extensions' value="php" />
+    <file>.</file>
+	 -->
+    <description>WordPress - Aiwos</description>
+    <exclude-pattern>/vendor/*</exclude-pattern>
+	<exclude-pattern>/node_modules/*</exclude-pattern>
+	<exclude-pattern>*.min.js</exclude-pattern>
+	<exclude-pattern>*.min.css</exclude-pattern>
+    <rule ref="WordPress">
+        <!-- I hate Yoda conditions -->
+        <exclude name="WordPress.PHP.YodaConditions"/>
+        <!-- variable names with starting underscores are present a lot in GF related plugins -->
+        <exclude name="PSR2.Classes.PropertyDeclaration.Underscore"/>
+        <exclude name="WordPress.NamingConventions"/>
+        <!-- Disable a few rules that are now considered industry standard - mostly whitespace -->
+        <exclude name="Universal.Arrays.DisallowShortArraySyntax.Found"/>
+        <exclude name="Generic.PHP.DisallowShortOpenTag.EchoFound"/>
+        <exclude name="Squiz.Operators.ValidLogicalOperators.NotAllowed"/>
+        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+    </rule>
+</ruleset>
