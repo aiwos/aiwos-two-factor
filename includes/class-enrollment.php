@@ -153,11 +153,25 @@ final class Enrollment {
 	 */
 	public static function process_recovery_codes( WP_User $user, array $input ): array {
 		$backup = Two_Factor_Core::get_providers()[ Account::BACKUP_CODES ] ?? null;
-		if ( ! self::verify_nonce( $user, 'recovery_codes', $input ) || ! $backup instanceof Two_Factor_Backup_Codes || ! Account::has_recent_proof() ) {
+		if ( ! self::verify_nonce( $user, 'recovery_codes', $input ) || ! $backup instanceof Two_Factor_Backup_Codes ) {
 			return array();
 		}
-		$codes = $backup->generate_codes( $user, array( 'method' => 'replace' ) );
-		Two_Factor_Core::enable_provider_for_user( $user->ID, Account::BACKUP_CODES );
+		// Under the account lock, on fresh state: this session must still exist and be proven.
+		$token = wp_get_session_token();
+		$codes = Account::locked(
+			$user->ID,
+			static function () use ( $user, $backup, $token ): array {
+				if ( '' === $token || null === WP_Session_Tokens::get_instance( $user->ID )->get( $token ) || ! Account::has_recent_proof() || ! Recovery_Token::session_may_enroll() ) {
+					return array();
+				}
+				$codes = $backup->generate_codes( $user, array( 'method' => 'replace' ) );
+				Two_Factor_Core::enable_provider_for_user( $user->ID, Account::BACKUP_CODES );
+				return $codes;
+			}
+		);
+		if ( ! is_array( $codes ) || ! $codes ) {
+			return array();
+		}
 		Notifier::inform( $user, __( 'New recovery codes created', 'aiwos-two-factor' ), __( 'New two-factor recovery codes were just created for your account. Older codes no longer work.', 'aiwos-two-factor' ) . ' ' . Notifier::not_you() );
 		return $codes;
 	}
@@ -201,11 +215,16 @@ final class Enrollment {
 				}
 				$recovery_id = Recovery_Token::current_id( $user->ID );
 				$replacing   = Account::has_authenticator( $user->ID );
+				// On a partial write the recovery stays pending (fail closed) and the user retries.
 				if ( ! Account::commit_authenticator( $user->ID, $key, (int) $tick, $replacing ) ) {
 					return array( 'status' => 'error' );
 				}
-				if ( null !== $recovery_id ) {
-					Recovery_Token::complete( $user->ID, $recovery_id );
+				if ( null !== $recovery_id && ! Recovery_Token::complete( $user->ID, $recovery_id ) ) {
+					return array( 'status' => 'error' );
+				}
+				// Still under the lock: mark this session as 2FA and end all others.
+				if ( get_current_user_id() === $user->ID ) {
+					Account::secure_current_session();
 				}
 				return array(
 					'status'     => 'ok',
@@ -225,10 +244,6 @@ final class Enrollment {
 		if ( $recovering ) {
 			error_log( sprintf( '[aiwos-two-factor] staff recovery completed: user %d linked a new app', $user->ID ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- audit trail in the server log.
 		}
-		if ( get_current_user_id() === $user->ID ) {
-			Account::secure_current_session();
-		}
-
 		$message = $replacing
 			? __( 'A new authenticator app was just linked to your account. The old app and your old recovery codes no longer work.', 'aiwos-two-factor' )
 			: __( 'An authenticator app was just linked to your account for two-factor authentication.', 'aiwos-two-factor' );

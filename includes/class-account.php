@@ -134,7 +134,7 @@ final class Account {
 	 * @param string $key       Proven secret.
 	 * @param int    $tick      Time step of the code that proved it.
 	 * @param bool   $replacing Whether an authenticator was already linked.
-	 * @return bool Whether the new secret was stored.
+	 * @return bool Whether everything was stored; on false the pending secret stays.
 	 */
 	public static function commit_authenticator( int $user_id, string $key, int $tick, bool $replacing ): bool {
 		$enabled = array_values( array_diff( (array) get_user_meta( $user_id, '_two_factor_enabled_providers', true ), array( '' ) ) );
@@ -144,17 +144,23 @@ final class Account {
 		}
 		$enabled[] = self::TOTP;
 
+		$enabled = array_values( array_unique( $enabled ) );
 		update_user_meta( $user_id, '_two_factor_totp_key', $key );
-		wp_cache_delete( $user_id, 'user_meta' );
-		if ( get_user_meta( $user_id, '_two_factor_totp_key', true ) !== $key ) {
-			return false;
-		}
 		// Mark the code as used, so it cannot be replayed at the next login.
 		update_user_meta( $user_id, '_two_factor_totp_last_successful_login', $tick );
-		update_user_meta( $user_id, '_two_factor_enabled_providers', array_values( array_unique( $enabled ) ) );
+		update_user_meta( $user_id, '_two_factor_enabled_providers', $enabled );
 		update_user_meta( $user_id, '_two_factor_provider', self::TOTP );
-		self::clear_pending_secret( $user_id );
-		return true;
+
+		// Read everything back: only a complete write counts.
+		wp_cache_delete( $user_id, 'user_meta' );
+		$stored = get_user_meta( $user_id, '_two_factor_totp_key', true ) === $key
+			&& (int) get_user_meta( $user_id, '_two_factor_totp_last_successful_login', true ) === $tick
+			&& in_array( self::TOTP, (array) get_user_meta( $user_id, '_two_factor_enabled_providers', true ), true )
+			&& self::TOTP === get_user_meta( $user_id, '_two_factor_provider', true );
+		if ( $stored ) {
+			self::clear_pending_secret( $user_id );
+		}
+		return $stored;
 	}
 
 	/**
@@ -171,6 +177,8 @@ final class Account {
 		$lock = 'aiwos_two_factor_' . $user_id;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- a named lock has no WordPress API and must not be cached.
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 10 )', $lock ) ) ) {
+			// Fails closed (nothing changes), but say why: a busy account or a database without GET_LOCK.
+			error_log( sprintf( '[aiwos-two-factor] could not lock account %d (GET_LOCK failed or timed out); change refused', $user_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operational diagnostic.
 			return null;
 		}
 		try {

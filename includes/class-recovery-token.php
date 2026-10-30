@@ -38,10 +38,17 @@ final class Recovery_Token {
 	private const SESSION_KEY = 'aiwos-two-factor-recovery';
 
 	/**
+	 * Password reset validated in this request: array{user: int, recovery: string, old_hash: string}.
+	 *
+	 * @var array<string, mixed>|null
+	 */
+	private static ?array $reset_in_progress = null;
+
+	/**
 	 * Register the password-reset hooks.
 	 */
 	public static function register(): void {
-		add_action( 'after_password_reset', array( self::class, 'password_was_reset' ) );
+		add_action( 'after_password_reset', array( self::class, 'password_was_reset' ), 10, 2 );
 		add_action( 'validate_password_reset', array( self::class, 'refuse_same_password' ), 10, 2 );
 	}
 
@@ -120,19 +127,27 @@ final class Recovery_Token {
 	}
 
 	/**
-	 * After a password reset: the password requirement of a pending recovery is met.
+	 * After a password reset: the requirement is met only for the recovery that was pending
+	 * when this reset was validated, and only when the new password really differs from the
+	 * old one. A reset validated before a newer recovery never satisfies that newer one.
 	 *
-	 * @param mixed $user User (WP_User from core's after_password_reset).
+	 * @param mixed $user     User (WP_User from core's after_password_reset).
+	 * @param mixed $new_pass The new password.
 	 */
-	public static function password_was_reset( $user ): void {
-		if ( ! $user instanceof WP_User ) {
+	public static function password_was_reset( $user, $new_pass = '' ): void {
+		$validated               = self::$reset_in_progress;
+		self::$reset_in_progress = null;
+		if ( ! $user instanceof WP_User || ! is_string( $new_pass ) || '' === $new_pass || ! $validated || $validated['user'] !== $user->ID ) {
+			return;
+		}
+		if ( wp_check_password( $new_pass, (string) $validated['old_hash'], $user->ID ) ) {
 			return;
 		}
 		Account::locked(
 			$user->ID,
-			static function () use ( $user ): void {
+			static function () use ( $user, $validated ): void {
 				$raw = get_user_meta( $user->ID, self::META, true );
-				if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) ) {
+				if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) && hash_equals( (string) ( $raw['id'] ?? '' ), (string) $validated['recovery'] ) ) {
 					$done       = $raw;
 					$done['pw'] = '';
 					update_user_meta( $user->ID, self::META, $done, $raw );
@@ -150,9 +165,19 @@ final class Recovery_Token {
 	public static function refuse_same_password( $errors, $user ): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput -- core's reset form; only compared with the stored hash.
 		$new = isset( $_POST['pass1'] ) && is_string( $_POST['pass1'] ) ? wp_unslash( $_POST['pass1'] ) : '';
-		if ( '' !== $new && $user instanceof WP_User && self::needs_new_password( $user->ID ) && wp_check_password( $new, $user->user_pass, $user->ID ) ) {
-			$errors->add( 'aiwos_two_factor_same_password', __( 'Choose a different password than before.', 'aiwos-two-factor' ) );
+		if ( '' === $new || ! $user instanceof WP_User || ! self::needs_new_password( $user->ID ) ) {
+			return;
 		}
+		if ( wp_check_password( $new, $user->user_pass, $user->ID ) ) {
+			$errors->add( 'aiwos_two_factor_same_password', __( 'Choose a different password than before.', 'aiwos-two-factor' ) );
+			return;
+		}
+		// Remember which recovery and which old password this reset is about (this request only).
+		self::$reset_in_progress = array(
+			'user'     => $user->ID,
+			'recovery' => (string) self::current_id( $user->ID ),
+			'old_hash' => (string) $user->user_pass,
+		);
 	}
 
 	/**
@@ -226,13 +251,15 @@ final class Recovery_Token {
 	 *
 	 * @param int    $user_id User ID.
 	 * @param string $id      Id of the recovery that was completed.
+	 * @return bool Whether this recovery was ended.
 	 */
-	public static function complete( int $user_id, string $id ): void {
+	public static function complete( int $user_id, string $id ): bool {
 		$raw = get_user_meta( $user_id, self::META, true );
-		if ( is_array( $raw ) && hash_equals( (string) ( $raw['id'] ?? '' ), $id ) ) {
-			// Deletes only the row with exactly this value.
-			delete_user_meta( $user_id, self::META, $raw );
+		if ( ! is_array( $raw ) || ! hash_equals( (string) ( $raw['id'] ?? '' ), $id ) ) {
+			return false;
 		}
+		// Deletes only the row with exactly this value.
+		return delete_user_meta( $user_id, self::META, $raw );
 	}
 
 	/**

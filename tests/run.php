@@ -100,6 +100,9 @@ try {
 	$check( 'recovery code works once', $backup->validate_code( $user, $codes[0] ) && ! $backup->validate_code( $user, $codes[0] ) );
 	aiwos_tf_log_in( $user );
 	$check( 'recovery codes need a recent 2FA proof', array() === Enrollment::process_recovery_codes( $user, $form( $user, 'recovery_codes' ) ) );
+	$gone = aiwos_tf_log_in( $user, 'Two_Factor_Totp' );
+	WP_Session_Tokens::get_instance( $user->ID )->destroy( $gone );
+	$check( 'recovery codes refused for a session that was logged out meanwhile', array() === Enrollment::process_recovery_codes( $user, $form( $user, 'recovery_codes' ) ) );
 
 	// P5 / A2 / A3: replace the app after logging in with a recovery code.
 	aiwos_tf_log_in( $user, 'Two_Factor_Backup_Codes' );
@@ -233,8 +236,15 @@ try {
 	do_action( 'validate_password_reset', $errors, get_userdata( $target->ID ) );
 	unset( $_POST['pass1'] );
 	$check( 'resetting to the same password is refused', in_array( 'aiwos_two_factor_same_password', $errors->get_error_codes(), true ) );
-	reset_password( get_userdata( $target->ID ), 'New-pass-2!' . wp_generate_password( 8 ) );
-	$check( 'a real password reset meets the requirement', ! Recovery_Token::needs_new_password( $target->ID ) );
+	reset_password( get_userdata( $target->ID ), 'Unvalidated-pass-3!' . wp_generate_password( 8 ) );
+	$check( 'a password write that did not go through the reset form does not count', Recovery_Token::needs_new_password( $target->ID ) );
+	$new_pass       = 'New-pass-2!' . wp_generate_password( 8 );
+	$_POST['pass1'] = $new_pass;
+	$errors         = new WP_Error();
+	do_action( 'validate_password_reset', $errors, get_userdata( $target->ID ) );
+	unset( $_POST['pass1'] );
+	reset_password( get_userdata( $target->ID ), $new_pass );
+	$check( 'a real password reset (form + new password) meets the requirement', ! $errors->has_errors() && ! Recovery_Token::needs_new_password( $target->ID ) );
 	aiwos_tf_log_in( get_userdata( $target->ID ) );
 	$html = $link_page();
 	$check( 'after a new password the link page shows a confirm button, not the setup form', str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' ) );
@@ -247,6 +257,13 @@ try {
 	$sessions->destroy( $link_token );
 	$check( 'enrollment from a session that a reset logged out is refused', 'recovery_required' === Enrollment::process( $target, 'enroll', $form( $target, 'enroll', array( 'authcode' => $link_code ) ) ) );
 	$sessions->update( $link_token, $saved );
+	$partial_code = $pending_code( $target );
+	$no_enable    = static fn( $check, $id, $key ) => '_two_factor_enabled_providers' === $key ? false : $check;
+	add_filter( 'update_user_metadata', $no_enable, 10, 3 );
+	$partial      = Enrollment::process( $target, 'enroll', $form( $target, 'enroll', array( 'authcode' => $partial_code ) ) );
+	remove_filter( 'update_user_metadata', $no_enable, 10 );
+	$check( 'partial write: error, recovery and pending secret stay', 'error' === $partial && Recovery_Token::is_pending( $target->ID ) && null !== Account::pending_secret( $target->ID ) );
+	delete_user_meta( $target->ID, '_two_factor_totp_last_successful_login' );
 	$check( 'enrollment completes the recovery', 'enrolled' === Enrollment::process( $target, 'enroll', $form( $target, 'enroll', array( 'authcode' => $pending_code( $target ) ) ) ) && ! Recovery_Token::is_pending( $target->ID ) );
 	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
 	Staff_Reset::start_recovery( $target, 'Expiry test', false );
