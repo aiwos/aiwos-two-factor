@@ -101,6 +101,14 @@ async function userScenario(browser) {
   check('admin-ajax refused for user without 2FA', ajax.status() === 403, String(ajax.status()));
   const post = await page.request.post(`${BASE_URL}/`, { form: { probe: '1' }, maxRedirects: 0 });
   check('frontend POST refused for user without 2FA', post.status() === 403, String(post.status()));
+  await page.goto(`${BASE_URL}/?x=/wp-json/`);
+  check('"/wp-json/" in the query string does not skip the guard (GET)', path(page) === '/2fa/', page.url());
+  const sneaky = await page.request.post(`${BASE_URL}/?x=/wp-json/`, { form: { probe: '1' }, maxRedirects: 0 });
+  check('"/wp-json/" in the query string does not skip the guard (POST)', sneaky.status() === 403, String(sneaky.status()));
+  const stray = await page.request.post(`${BASE_URL}/2fa/`, { form: { gform_submit: '1' }, maxRedirects: 0 });
+  check('other POSTs to /2fa/ are refused', stray.status() === 403, String(stray.status()));
+  const mixed = await page.request.post(`${BASE_URL}/2fa/`, { form: { aiwos_two_factor_action: 'enroll', gform_submit: '1' }, maxRedirects: 0 });
+  check('own form POST to /2fa/ ends in our redirect before other plugins run', [302, 303].includes(mixed.status()) && (mixed.headers().location || '').includes('aiwos-2fa=invalid_nonce'), `${mixed.status()} ${mixed.headers().location || ''}`);
   const rest = await page.request.get(`${BASE_URL}/wp-json/wp/v2/users/me`);
   check('REST refused for user without 2FA', rest.status() === 401 || rest.status() === 403, String(rest.status()));
 

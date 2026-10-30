@@ -86,6 +86,23 @@ final class Enrollment {
 	}
 
 	/**
+	 * POST to the setup page by a user who still has to set up 2FA. Called by the Enforcer on
+	 * wp_loaded, before any other plugin sees the request: only this plugin's forms are
+	 * handled (always ending in a redirect); anything else is refused.
+	 */
+	public static function handle_gated_post(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in process().
+		$action = isset( $_POST[ self::ACTION_FIELD ] ) ? sanitize_key( wp_unslash( $_POST[ self::ACTION_FIELD ] ) ) : '';
+		if ( ! in_array( $action, array( 'enroll', 'redeem', 'replace', 'cancel' ), true ) ) {
+			wp_die( esc_html__( 'Two-factor authentication is required. Set it up or confirm your code first.', 'aiwos-two-factor' ), '', array( 'response' => 403 ) );
+		}
+		View::no_cache();
+		$status = self::process( wp_get_current_user(), $action, wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in process().
+		wp_safe_redirect( add_query_arg( self::STATUS_PARAM, $status, Setup_Page::url() ) );
+		exit;
+	}
+
+	/**
 	 * Handle a submitted form for the current user. Any user id in the input is ignored.
 	 *
 	 * @param WP_User              $user   Current user.

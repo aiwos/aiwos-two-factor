@@ -21,6 +21,11 @@ final class Setup_Page {
 	public const SLUG = '2fa';
 
 	/**
+	 * Query variable of the built-in page on sites without pretty permalinks.
+	 */
+	public const FALLBACK_ARG = 'aiwos-two-factor-setup';
+
+	/**
 	 * Cached result of page(); false = not looked up yet.
 	 *
 	 * @var WP_Post|null|false
@@ -43,13 +48,15 @@ final class Setup_Page {
 	}
 
 	/**
-	 * The published page with the setup slug, if any (looked up once per request).
+	 * The published page with the setup slug holding the shortcode, if any (cached per request).
+	 * The front page is never used: its URL is "/", which cannot be told apart from the site.
 	 */
 	public static function page(): ?WP_Post {
 		if ( false === self::$page ) {
-			$found = get_page_by_path( self::SLUG );
-			// A "2fa" page without the form would leave users stuck: then use the built-in page.
-			self::$page = $found instanceof WP_Post && 'publish' === $found->post_status && has_shortcode( $found->post_content, Enrollment::SHORTCODE ) ? $found : null;
+			$found      = get_page_by_path( self::SLUG );
+			self::$page = $found instanceof WP_Post && 'publish' === $found->post_status
+				&& has_shortcode( $found->post_content, Enrollment::SHORTCODE )
+				&& (int) get_option( 'page_on_front' ) !== $found->ID ? $found : null;
 		}
 		return self::$page;
 	}
@@ -59,23 +66,37 @@ final class Setup_Page {
 	 */
 	public static function url(): string {
 		$page = self::page();
-		return $page ? (string) get_permalink( $page ) : home_url( '/' . self::SLUG . '/' );
+		if ( $page ) {
+			return (string) get_permalink( $page );
+		}
+		// Without pretty permalinks /2fa/ would be a server 404.
+		return get_option( 'permalink_structure' ) ? home_url( '/' . self::SLUG . '/' ) : add_query_arg( self::FALLBACK_ARG, '1', home_url( '/' ) );
 	}
 
 	/**
-	 * Whether the current request is for the setup page. Works on the request path, so it
-	 * gives the same answer before WordPress has parsed the request (the early guards).
+	 * Whether the current request is for the setup page and nothing else. Works on the raw
+	 * request (path and query), so it gives the same answer before WordPress parsed it. Any
+	 * other query variable (?p=, ?s=, ...) could make WordPress serve other content: refused.
 	 */
 	public static function is_current(): bool {
-		$request = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
-		$target  = self::url();
-		$path    = static fn( string $url ): string => strtolower( trim( preg_replace( '#^/?index\.php(?=/)#', '', (string) wp_parse_url( $url, PHP_URL_PATH ) ), '/' ) );
-		if ( '' === $path( $target ) ) {
-			// Plain permalinks: /?page_id=123.
-			parse_str( (string) wp_parse_url( $target, PHP_URL_QUERY ), $query );
-			return isset( $query['page_id'], $_GET['page_id'] ) && (string) $query['page_id'] === sanitize_text_field( wp_unslash( $_GET['page_id'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only.
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput, WordPress.Security.NonceVerification.Recommended -- compared exactly, never output or stored.
+		$request = wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ) );
+		$query   = $_GET;
+		// phpcs:enable
+		$target = wp_parse_url( self::url() );
+		$path   = static fn( $parts ): string => strtolower( trim( preg_replace( '#^/?index\.php(?=/|$)#', '', (string) ( $parts['path'] ?? '' ) ), '/' ) );
+		parse_str( (string) ( $target['query'] ?? '' ), $target_query );
+
+		$allowed = array_merge( array( Enrollment::STATUS_PARAM, Recovery_Token::QUERY_ARG ), array_keys( $target_query ) );
+		if ( array_diff( array_keys( $query ), $allowed ) || $path( $request ) !== $path( $target ) ) {
+			return false;
 		}
-		return $path( $request ) === $path( $target );
+		foreach ( $target_query as $key => $value ) {
+			if ( ! isset( $query[ $key ] ) || ! is_string( $query[ $key ] ) || (string) $value !== $query[ $key ] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

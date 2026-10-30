@@ -212,12 +212,15 @@ try {
 	$check( 'pending recovery is never exempt', Enforcer::must_enroll( $target ) );
 	remove_filter( Enforcer::CONDITION_FILTER, $opt_out );
 	$check( 'replace and cancel refused before the link', 'recovery_required' === Enrollment::process( $target, 'replace', $form( $target, 'replace' ) ) && 'recovery_required' === Enrollment::process( $target, 'cancel', $form( $target, 'cancel' ) ) );
-	$check( 'link page shows a confirm button, not the setup form', ( static function () use ( $token ) {
-		$_GET[ Recovery_Token::QUERY_ARG ] = $token;
-		$html                              = do_shortcode( '[two-factor-set-totp]' );
-		unset( $_GET[ Recovery_Token::QUERY_ARG ] );
-		return str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' );
-	} )() );
+	$check(
+		'link page shows a confirm button, not the setup form',
+		( static function () use ( $token ) {
+			$_GET[ Recovery_Token::QUERY_ARG ] = $token;
+			$html                              = do_shortcode( '[two-factor-set-totp]' );
+			unset( $_GET[ Recovery_Token::QUERY_ARG ] );
+			return str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' );
+		} )()
+	);
 	$check( 'wrong token refused', 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => str_repeat( '0', 64 ) ) ) ) );
 	$check( 'redeem needs a nonce', 'invalid_nonce' === Enrollment::process( $target, 'redeem', array( 'token' => $token ) ) );
 	$check( 'right token accepted once', 'recovery_ok' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) ) && ! Recovery_Token::redeem( $token ) );
@@ -246,14 +249,19 @@ try {
 	if ( $real_page ) {
 		wp_update_post( array( 'ID' => $real_page->ID, 'post_status' => 'draft' ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
 	}
-	$_SERVER['REQUEST_URI'] = '/2FA/?utm=x';
-	$check( 'fallback /2fa/ recognised (case, query string)', home_url( '/2fa/' ) === Setup_Page::url() && Setup_Page::is_current() );
+	$_SERVER['REQUEST_URI'] = '/2FA/?aiwos-2fa=enrolled';
+	$_GET                   = array( 'aiwos-2fa' => 'enrolled' );
+	$check( 'fallback /2fa/ recognised (case, status param)', home_url( '/2fa/' ) === Setup_Page::url() && Setup_Page::is_current() );
+	$_SERVER['REQUEST_URI'] = '/2fa/?p=1';
+	$_GET                   = array( 'p' => '1' );
+	$check( 'other query variables on /2fa/ are not the setup page', ! Setup_Page::is_current() );
+	$_GET                   = array();
 	$_SERVER['REQUEST_URI'] = '/2fa-other/';
 	$check( 'other paths are not the setup page', ! Setup_Page::is_current() );
 	if ( $real_page ) {
 		wp_update_post( array( 'ID' => $real_page->ID, 'post_status' => 'publish' ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
 		$check( 'real page with the shortcode wins', get_permalink( $real_page ) === Setup_Page::url() );
-		$_SERVER['REQUEST_URI'] = (string) wp_parse_url( get_permalink( $real_page ), PHP_URL_PATH ) . '?x=1';
+		$_SERVER['REQUEST_URI'] = (string) wp_parse_url( get_permalink( $real_page ), PHP_URL_PATH );
 		$check( 'real page recognised by path', Setup_Page::is_current() );
 	}
 } finally {

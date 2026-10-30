@@ -85,13 +85,15 @@ Users who must use 2FA are those for whom `aiwos/force-two-factor/force-2fa-cond
 | Request | Result |
 |---|---|
 | Frontend GET | Redirect to `/2fa/` (checked on `wp_loaded`, before plugins handle the request) |
-| Frontend POST | `403` |
+| Frontend POST | `403`; on `/2fa/` only this plugin's own forms are handled, before any other plugin sees the request |
 | wp-admin | Redirect to `/2fa/` |
 | admin-ajax, admin-post | `403` |
 | REST API | `403` |
 | XML-RPC login | Refused |
 
-`wp-login.php` stays open for login, logout, lost password and revalidation.
+`wp-login.php` stays open for login, logout, lost password and revalidation. Handlers that run on `init` are not gated, because sites register their exemption filters there.
+
+Only a plain request for the setup page counts: other query variables (`?p=`, `?s=`, ...) on `/2fa/` are redirected like any other page. Users who only need to revalidate cannot POST anything, also not on `/2fa/`; they confirm their code first.
 
 **Users with 2FA whose browser session was not opened with it** (for example a session from before 2FA was set up) are sent to upstream's revalidation first. REST and AJAX requests from such a session get `403`.
 

@@ -35,6 +35,8 @@ final class Enforcer {
 	public static function register(): void {
 		// Before parse_request and 'wp', where plugins such as Gravity Forms handle submissions.
 		add_action( 'wp_loaded', array( self::class, 'guard_frontend' ), 0 );
+		// Backstop: what WordPress actually serves must be the setup page.
+		add_action( 'template_redirect', array( self::class, 'guard_query' ), 0 );
 		add_action( 'admin_init', array( self::class, 'guard_admin' ), 1 );
 		// After core's cookie and application-password checks.
 		add_filter( 'rest_authentication_errors', array( self::class, 'guard_rest' ), 110 );
@@ -82,10 +84,21 @@ final class Enforcer {
 			return;
 		}
 		$enroll = self::must_enroll( wp_get_current_user() );
-		if ( ( ! $enroll && ! self::must_revalidate() ) || Setup_Page::is_current() ) {
+		if ( ! $enroll && ! self::must_revalidate() ) {
 			return;
 		}
-		if ( ! in_array( $_SERVER['REQUEST_METHOD'] ?? 'GET', array( 'GET', 'HEAD' ), true ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared against a whitelist.
+		$is_get = in_array( $_SERVER['REQUEST_METHOD'] ?? 'GET', array( 'GET', 'HEAD' ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared against a whitelist.
+		if ( Setup_Page::is_current() ) {
+			if ( $is_get ) {
+				return;
+			}
+			// A POST must never reach 'wp', where other plugins process submissions on any URL.
+			if ( $enroll ) {
+				Enrollment::handle_gated_post();
+			}
+			wp_die( esc_html( self::message() ), '', array( 'response' => 403 ) );
+		}
+		if ( ! $is_get ) {
 			wp_die( esc_html( self::message() ), '', array( 'response' => 403 ) );
 		}
 		// Relative path of this request; upstream sanitises it and redirects with wp_safe_redirect.
@@ -93,11 +106,33 @@ final class Enforcer {
 	}
 
 	/**
+	 * After WordPress parsed the request: a user who must set up 2FA only gets the setup page.
+	 */
+	public static function guard_query(): void {
+		$page = Setup_Page::page();
+		if ( ! $page || ! is_user_logged_in() || ! self::must_enroll( wp_get_current_user() ) || is_page( $page->ID ) ) {
+			return;
+		}
+		self::redirect( Setup_Page::url() );
+	}
+
+	/**
 	 * Whether this is a REST request (decided before WordPress parses it).
 	 */
 	private static function is_rest_request(): bool {
-		$uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
-		return isset( $_GET['rest_route'] ) || str_contains( $uri, '/' . rest_get_url_prefix() . '/' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only.
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput, WordPress.Security.NonceVerification.Recommended -- routing only, compared, never output.
+		// Same rule as core: only a non-empty string makes WordPress serve REST.
+		if ( isset( $_GET['rest_route'] ) && is_string( $_GET['rest_route'] ) && '' !== trim( $_GET['rest_route'] ) ) {
+			return true;
+		}
+		if ( ! get_option( 'permalink_structure' ) ) {
+			return false;
+		}
+		// Path only: a query string such as ?x=/wp-json/ must not skip this guard.
+		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		// phpcs:enable
+		$rest = (string) wp_parse_url( rest_url(), PHP_URL_PATH );
+		return '/' !== $rest && '' !== $rest && str_starts_with( trailingslashit( $path ), $rest );
 	}
 
 	/**
