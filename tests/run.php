@@ -11,7 +11,7 @@
  * @package Aiwos\TwoFactor
  */
 
-// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.WP.GlobalVariablesOverride.Prohibited, WordPress.Security.ValidatedSanitizedInput -- CLI test script.
+// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.WP.GlobalVariablesOverride.Prohibited, WordPress.Security.ValidatedSanitizedInput, WordPress.DB.DirectDatabaseQuery -- CLI test script.
 
 use Aiwos\TwoFactor\Account;
 use Aiwos\TwoFactor\Enforcer;
@@ -326,6 +326,11 @@ try {
 	$codes_request->set_body_params( array( 'user_id' => $pw_only->ID ) );
 	$codes_response = rest_do_request( $codes_request );
 	$check( 'administrator cannot generate another user\'s recovery codes', $codes_response->is_error() && empty( $codes_response->get_data()['codes'] ) );
+	$own_request = new WP_REST_Request( 'POST', '/' . Two_Factor_Core::REST_NAMESPACE . '/generate-backup-codes' );
+	$own_request->set_body_params( array( 'user_id' => $admin->ID ) );
+	$own_response = rest_do_request( $own_request );
+	global $wpdb;
+	$check( 'upstream REST write on own account still works, lock released after', ! $own_response->is_error() && ! empty( $own_response->get_data()['codes'] ) && '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', 'aiwos_two_factor_' . $admin->ID ) ) );
 	$check( 'upstream settings removed from other users\' profiles', false === has_action( 'edit_user_profile', array( Two_Factor_Core::class, 'user_two_factor_options' ) ) && false === has_action( 'edit_user_profile_update', array( Two_Factor_Core::class, 'user_two_factor_options_update' ) ) );
 
 	// the REST guard through the real filter chain (registration and order), with a control.

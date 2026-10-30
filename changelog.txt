@@ -5,10 +5,12 @@
 - [two-factor-set-totp]: POST form, secret kept server-side (expires after 30 minutes) until a 6-digit code proves it; code recorded as used; TOTP primary; other sessions logged out. A secret kept while TOTP is off is never reactivated.
 - Replace authenticator app on /2fa/ after a recent second-factor proof (a recovery-code login counts); old app and old recovery codes stop working.
 - One-time recovery codes on /2fa/.
-- Staff-assisted recovery (capability aiwos_reset_two_factor, recent 2FA of the staff member, scoped targets, required verification note): revokes sessions and application passwords, clears 2FA data with any provider switched off, and mails a single-use 24-hour link; the password alone cannot link a new app. Available in wp-admin and as [two-factor-staff-reset].
-- Mandatory 2FA on frontend, wp-admin, admin-ajax, admin-post, REST and XML-RPC; sessions not opened with 2FA must revalidate. Built-in /2fa/ page when no page holds the shortcode.
-- Mails on app link, replacement, new recovery codes and staff recovery; audit hook aiwos/two-factor/recovery-started.
-- nl_NL translation; live-WordPress tests (incl. disabled providers) and browser tests.
+- Staff-assisted recovery: capability aiwos_reset_two_factor (automatic for manage_options), recent 2FA of the staff member, scope by editable_roles, required verification note; single-use 24-hour link to the existing address, bound to the session and to this recovery; the password alone cannot link an app; optional "password may be compromised" (link works only after a real password reset); separate password-only action. Available in wp-admin and as [two-factor-staff-reset].
+- Upstream's own REST, profile and settings paths cannot change another user's 2FA.
+- Mandatory 2FA on frontend (wp_loaded and parse_request), wp-admin, admin-ajax, admin-post, REST and XML-RPC; sessions not opened with 2FA must revalidate; a request without a session cookie fails closed.
+- Recovery, enrollment, recovery codes and upstream REST writes are serialized per account and verified after writing.
+- Mails on app link, replacement, new recovery codes and staff recovery; audit hooks and error-log lines.
+- nl_NL translation; live-WordPress tests, HTTP tests and browser tests; CI runs the live-WordPress and HTTP tests against @wordpress/env.
 
 = 1.0 = 
 - Added translation.

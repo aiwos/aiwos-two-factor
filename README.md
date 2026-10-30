@@ -28,7 +28,7 @@ Everything works without wp-admin and without the REST API. Our sites block both
 ### Lost phone
 
 - **Recovery codes.** The user creates 10 one-time codes on `/2fa/`.
-  - They are shown once.
+  - They are shown once, and only after they were stored and enabled.
   - Creating new ones invalidates the old ones and sends a mail.
 - **Replace authenticator app.** On `/2fa/`, with a recent proof; logging in with a recovery code counts as proof.
   - The user gets a new QR code, and the current app keeps working until the new one is proven. "Cancel" or letting it expire changes nothing.
@@ -63,7 +63,7 @@ Staff-assisted recovery is for a user who has neither the app nor a recovery cod
   5. A one-time link, valid for 24 hours, is mailed to the account's **existing** address.
   6. When the password may be compromised, the staff member ticks that box: a standard password reset mail is sent too, and the recovery link only works after the password was reset through WordPress' "lost password" flow (a hash upgrade at login does not count). Resetting it to the same password is refused.
 - **Only a forgotten password:** the second button sends just the standard password reset mail and leaves 2FA as it is.
-- **No other way to change someone else's 2FA:** upstream's own REST endpoints, settings actions and profile screen are limited to the user's own account. Staff never see or set another user's secret or recovery codes.
+- **No other way to change someone else's 2FA:** upstream's own REST endpoints, settings actions and profile screen are limited to the user's own account. Staff never see or set another user's secret or recovery codes. Upstream's REST writes on the user's own account run under the same per-account lock as a staff recovery, so the two never interleave.
 - **The password alone is not enough.**
   - While the account is in recovery, the user can log in with the password but cannot link an app until they open the mailed link. The condition filter cannot exempt an account in recovery.
   - Opening the link only shows a "Continue" button; the link is used by that POST, so mail scanners cannot use it. The page is sent with `Referrer-Policy: no-referrer`, so the token is not passed on. When the user is logged out, the link leads to the login screen without the token in the URL, and they open it again after logging in.

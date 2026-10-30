@@ -166,6 +166,13 @@ final class Enrollment {
 				}
 				$codes = $backup->generate_codes( $user, array( 'method' => 'replace' ) );
 				Two_Factor_Core::enable_provider_for_user( $user->ID, Account::BACKUP_CODES );
+				// Only show codes that were really stored and enabled.
+				wp_cache_delete( $user->ID, 'user_meta' );
+				$stored  = (array) get_user_meta( $user->ID, '_two_factor_backup_codes', true );
+				$enabled = (array) get_user_meta( $user->ID, '_two_factor_enabled_providers', true );
+				if ( count( $stored ) !== count( $codes ) || ! wp_check_password( (string) $codes[0], (string) $stored[0] ) || ! in_array( Account::BACKUP_CODES, $enabled, true ) ) {
+					return array();
+				}
 				return $codes;
 			}
 		);

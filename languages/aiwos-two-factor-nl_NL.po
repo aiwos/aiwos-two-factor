@@ -232,3 +232,6 @@ msgstr "Kies een ander wachtwoord dan voorheen."
 
 msgid "Nothing was changed: the reset could not be saved. Please try again."
 msgstr "Er is niets gewijzigd: de reset kon niet worden opgeslagen. Probeer het opnieuw."
+
+msgid "Please try again."
+msgstr "Probeer het opnieuw."

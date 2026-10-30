@@ -29,6 +29,51 @@ final class Upstream_Guard {
 		remove_action( 'edit_user_profile_update', array( Two_Factor_Core::class, 'user_two_factor_options_update' ) );
 		add_action( 'edit_user_profile', array( self::class, 'render_profile_note' ) );
 		add_action( 'admin_init', array( self::class, 'block_settings_actions_for_others' ), 0 );
+		// Upstream's own REST writes (own account) run under the same account lock as a staff
+		// recovery, so the two never interleave; the permission check runs inside the lock.
+		add_filter( 'rest_request_before_callbacks', array( self::class, 'lock_upstream_write' ), 10, 3 );
+		add_filter( 'rest_request_after_callbacks', array( self::class, 'unlock_upstream_write' ) );
+	}
+
+	/**
+	 * Account whose lock this request holds, if any.
+	 *
+	 * @var int
+	 */
+	private static int $locked_user = 0;
+
+	/**
+	 * Before an upstream two-factor REST write: take the current user's account lock.
+	 *
+	 * @param mixed            $response Response so far.
+	 * @param array<mixed>     $handler  Route handler.
+	 * @param \WP_REST_Request $request  Request.
+	 * @return mixed
+	 */
+	public static function lock_upstream_write( $response, $handler, $request ) {
+		$user_id = get_current_user_id();
+		if ( is_wp_error( $response ) || ! $user_id || 'GET' === $request->get_method() || ! str_starts_with( (string) $request->get_route(), '/' . Two_Factor_Core::REST_NAMESPACE . '/' ) ) {
+			return $response;
+		}
+		if ( ! Account::lock( $user_id ) ) {
+			return new \WP_Error( 'aiwos_two_factor_busy', __( 'Please try again.', 'aiwos-two-factor' ), array( 'status' => 503 ) );
+		}
+		self::$locked_user = $user_id;
+		return $response;
+	}
+
+	/**
+	 * After the callback: release the lock taken above.
+	 *
+	 * @param mixed $response Response.
+	 * @return mixed
+	 */
+	public static function unlock_upstream_write( $response ) {
+		if ( self::$locked_user ) {
+			Account::unlock( self::$locked_user );
+			self::$locked_user = 0;
+		}
+		return $response;
 	}
 
 	/**

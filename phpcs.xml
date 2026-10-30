@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="icalender" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/squizlabs/PHP_CodeSniffer/master/phpcs.xsd">
     <!-- <rule ref="wordpress" /> -->
-    <!-- <arg name='extensions' value="php" /> 
+    <!-- <arg name='extensions' value="php" />
     <file>.</file>
 	 -->
     <description>WordPress - Aiwos</description>
-    <exclude-pattern>/vendor/*</exclude-pattern>	
+    <exclude-pattern>/vendor/*</exclude-pattern>
 	<exclude-pattern>/node_modules/*</exclude-pattern>
 	<exclude-pattern>*.min.js</exclude-pattern>
 	<exclude-pattern>*.min.css</exclude-pattern>

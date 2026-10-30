@@ -173,20 +173,42 @@ final class Account {
 	 * @return mixed Return value of $callback, or null when the lock could not be taken.
 	 */
 	public static function locked( int $user_id, callable $callback ) {
-		global $wpdb;
-		$lock = 'aiwos_two_factor_' . $user_id;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- a named lock has no WordPress API and must not be cached.
-		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 10 )', $lock ) ) ) {
-			// Fails closed (nothing changes), but say why: a busy account or a database without GET_LOCK.
-			error_log( sprintf( '[aiwos-two-factor] could not lock account %d (GET_LOCK failed or timed out); change refused', $user_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operational diagnostic.
+		if ( ! self::lock( $user_id ) ) {
 			return null;
 		}
 		try {
-			wp_cache_delete( $user_id, 'user_meta' );
 			return $callback();
 		} finally {
-			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- see GET_LOCK.
+			self::unlock( $user_id );
 		}
+	}
+
+	/**
+	 * Take the per-account lock (waits up to 10 s) and drop the account's cached meta.
+	 * Prefer locked(); this is for work that spans hooks (upstream REST callbacks).
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function lock( int $user_id ): bool {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- a named lock has no WordPress API and must not be cached.
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 10 )', 'aiwos_two_factor_' . $user_id ) ) ) {
+			// Fails closed (nothing changes), but say why: a busy account or a database without GET_LOCK.
+			error_log( sprintf( '[aiwos-two-factor] could not lock account %d (GET_LOCK failed or timed out); change refused', $user_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operational diagnostic.
+			return false;
+		}
+		wp_cache_delete( $user_id, 'user_meta' );
+		return true;
+	}
+
+	/**
+	 * Release the per-account lock.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function unlock( int $user_id ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', 'aiwos_two_factor_' . $user_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- see lock().
 	}
 
 	/**
