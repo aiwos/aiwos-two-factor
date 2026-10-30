@@ -29,7 +29,8 @@ jobs:
           composer global require --no-interaction wp-coding-standards/wpcs dealerdirect/phpcodesniffer-composer-installer
 
       - name: phpcs
-        run: "$(composer global config bin-dir --absolute --quiet)/phpcs" --standard=phpcs.xml --extensions=php .
+        run: |
+          "$(composer global config bin-dir --absolute --quiet)/phpcs" --standard=phpcs.xml --extensions=php .
 
   integration:
     name: Live WordPress tests (upstream Two Factor 0.17.0)
