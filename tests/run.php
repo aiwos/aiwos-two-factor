@@ -155,9 +155,11 @@ try {
 		} )()
 	);
 
-	// B1: staff reset authorisation.
-	$manager = aiwos_tf_user( 'subscriber', array( 'edit_users', 'list_users', Staff_Reset::CAP ) );
-	$target  = aiwos_tf_user( 'subscriber' );
+	// B1: staff reset authorisation. Like mijn-afk, the site limits which roles managers assign.
+	$limit_roles = static fn( $roles ) => array_diff_key( $roles, array( 'administrator' => true ) );
+	add_filter( 'editable_roles', $limit_roles );
+	$manager     = aiwos_tf_user( 'subscriber', array( 'edit_users', 'list_users', Staff_Reset::CAP ) );
+	$target      = aiwos_tf_user( 'subscriber' );
 	aiwos_tf_link_app( $target );
 	aiwos_tf_log_in( aiwos_tf_user( 'subscriber', array( 'edit_users' ) ), 'Two_Factor_Totp' );
 	$check( 'edit_users without the capability: not allowed', 'not_allowed' === Staff_Reset::check( $target ) );
@@ -195,6 +197,7 @@ try {
 	);
 	$check( 'reason is required', 'reason_required' === Staff_Reset::start_recovery( $target, '  ', false ) );
 	$mails_before = count( aiwos_tf_mails_to( $target ) );
+	wp_set_password( 'Old-known-pass-1!', $target->ID );
 	$check( 'recovery started', 'started' === Staff_Reset::start_recovery( $target, 'Called back on known number', true ) );
 	$check( 'target logged out, app passwords revoked', null === WP_Session_Tokens::get_instance( $target->ID )->get( $target_token ) && array() === WP_Application_Passwords::get_user_application_passwords( $target->ID ) );
 	$check( 'target 2FA removed', ! Two_Factor_Core::is_user_using_two_factor( $target->ID ) && '' === get_user_meta( $target->ID, '_two_factor_totp_key', true ) );
@@ -212,19 +215,38 @@ try {
 	$check( 'pending recovery is never exempt', Enforcer::must_enroll( $target ) );
 	remove_filter( Enforcer::CONDITION_FILTER, $opt_out );
 	$check( 'replace and cancel refused before the link', 'recovery_required' === Enrollment::process( $target, 'replace', $form( $target, 'replace' ) ) && 'recovery_required' === Enrollment::process( $target, 'cancel', $form( $target, 'cancel' ) ) );
-	$check(
-		'link page shows a confirm button, not the setup form',
-		( static function () use ( $token ) {
-			$_GET[ Recovery_Token::QUERY_ARG ] = $token;
-			$html                              = do_shortcode( '[two-factor-set-totp]' );
-			unset( $_GET[ Recovery_Token::QUERY_ARG ] );
-			return str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' );
-		} )()
-	);
+	$link_page = static function () use ( $token ): string {
+		$_GET[ Recovery_Token::QUERY_ARG ] = $token;
+		$html                              = do_shortcode( '[two-factor-set-totp]' );
+		unset( $_GET[ Recovery_Token::QUERY_ARG ] );
+		return $html;
+	};
+	$html      = $link_page();
+	$check( 'compromised password: link page asks for a new password first', str_contains( $html, esc_url( wp_lostpassword_url() ) ) && ! str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' ) );
 	$check( 'wrong token refused', 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => str_repeat( '0', 64 ) ) ) ) );
 	$check( 'redeem needs a nonce', 'invalid_nonce' === Enrollment::process( $target, 'redeem', array( 'token' => $token ) ) );
-	$check( 'right token accepted once', 'recovery_ok' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) ) && ! Recovery_Token::redeem( $token ) );
+	$check( 'compromised password: link refused and not used up until the password changed', 'password_first' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) ) && Recovery_Token::needs_new_password( $target->ID ) );
+	wp_set_password( 'Old-known-pass-1!', $target->ID );
+	$check( 'a hash upgrade (same password stored again) does not count as a reset', Recovery_Token::needs_new_password( $target->ID ) );
+	$_POST['pass1'] = 'Old-known-pass-1!';
+	$errors         = new WP_Error();
+	do_action( 'validate_password_reset', $errors, get_userdata( $target->ID ) );
+	unset( $_POST['pass1'] );
+	$check( 'resetting to the same password is refused', in_array( 'aiwos_two_factor_same_password', $errors->get_error_codes(), true ) );
+	reset_password( get_userdata( $target->ID ), 'New-pass-2!' . wp_generate_password( 8 ) );
+	$check( 'a real password reset meets the requirement', ! Recovery_Token::needs_new_password( $target->ID ) );
+	aiwos_tf_log_in( get_userdata( $target->ID ) );
+	$html = $link_page();
+	$check( 'after a new password the link page shows a confirm button, not the setup form', str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' ) );
+	$check( 'after a new password the link works, once', 'recovery_ok' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) ) && 'invalid' === Recovery_Token::redeem( $token ) );
 	$check( 'session with the link may enroll', Recovery_Token::session_may_enroll() );
+	$link_code  = $pending_code( $target );
+	$link_token = wp_get_session_token();
+	$sessions   = WP_Session_Tokens::get_instance( $target->ID );
+	$saved      = $sessions->get( $link_token );
+	$sessions->destroy( $link_token );
+	$check( 'enrollment from a session that a reset logged out is refused', 'recovery_required' === Enrollment::process( $target, 'enroll', $form( $target, 'enroll', array( 'authcode' => $link_code ) ) ) );
+	$sessions->update( $link_token, $saved );
 	$check( 'enrollment completes the recovery', 'enrolled' === Enrollment::process( $target, 'enroll', $form( $target, 'enroll', array( 'authcode' => $pending_code( $target ) ) ) ) && ! Recovery_Token::is_pending( $target->ID ) );
 	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
 	Staff_Reset::start_recovery( $target, 'Expiry test', false );
@@ -233,6 +255,77 @@ try {
 	update_user_meta( $target->ID, Recovery_Token::META, $state );
 	aiwos_tf_log_in( $target );
 	$check( 'expired recovery cannot be redeemed', Recovery_Token::is_expired( $target->ID ) && ! Recovery_Token::session_may_enroll() );
+
+	// a link of an earlier recovery never unlocks a later one; finishing never ends a newer one.
+	$gen_target = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	Staff_Reset::start_recovery( $gen_target, 'Generation test A', false );
+	$old_id = Recovery_Token::current_id( $gen_target->ID );
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	Staff_Reset::start_recovery( $gen_target, 'Generation test B', false );
+	$new_id = Recovery_Token::current_id( $gen_target->ID );
+	aiwos_tf_log_in( $gen_target );
+	Two_Factor_Core::update_current_user_session( array( 'aiwos-two-factor-recovery' => $old_id ) );
+	$check( 'session bound to an older recovery may not enroll', $old_id !== $new_id && ! Recovery_Token::session_may_enroll() );
+	Recovery_Token::complete( $gen_target->ID, (string) $old_id );
+	$check( 'completing an older recovery leaves the newer one', $new_id === Recovery_Token::current_id( $gen_target->ID ) );
+
+	// account managers only recover accounts whose roles they may assign.
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	$plain   = aiwos_tf_user( 'subscriber' );
+	$no_subs = static fn( $roles ) => array_diff_key( $roles, array( 'subscriber' => true ) );
+	$allowed = Staff_Reset::check( $plain );
+	add_filter( 'editable_roles', $no_subs );
+	$refused = Staff_Reset::check( $plain );
+	remove_filter( 'editable_roles', $no_subs );
+	$check( 'manager scope follows editable_roles', '' === $allowed && 'not_allowed' === $refused );
+	$unlimited = static fn() => wp_roles()->roles;
+	add_filter( 'editable_roles', $unlimited, PHP_INT_MAX );
+	$check( 'site that does not limit editable_roles: managers have no scope', 'not_allowed' === Staff_Reset::check( $plain ) );
+	remove_filter( 'editable_roles', $unlimited, PHP_INT_MAX );
+	$special = aiwos_tf_user( 'subscriber', array( 'approve_grants' ) );
+	$check( 'individual capability the manager lacks blocks the reset', 'not_allowed' === Staff_Reset::check( $special ) );
+
+	// Recovery state that cannot be stored: nothing is cleared.
+	$keep     = aiwos_tf_user( 'subscriber' );
+	$keep_key = aiwos_tf_link_app( $keep );
+	$no_store = static fn( $check, $id, $key ) => Recovery_Token::META === $key ? false : $check;
+	add_filter( 'update_user_metadata', $no_store, 10, 3 );
+	$status   = Staff_Reset::start_recovery( $keep, 'Store failure test', false );
+	remove_filter( 'update_user_metadata', $no_store, 10 );
+	$check( 'recovery not stored: reset aborts and 2FA stays', 'error' === $status && get_user_meta( $keep->ID, '_two_factor_totp_key', true ) === $keep_key );
+
+	// password-only help keeps 2FA.
+	$pw_only = aiwos_tf_user( 'subscriber' );
+	$pw_app  = aiwos_tf_link_app( $pw_only );
+	$before  = count( aiwos_tf_mails_to( $pw_only ) );
+	$check( 'password-only mail sent, 2FA kept', 'password_sent' === Staff_Reset::send_password_reset( $pw_only, 'Forgot password, called back' ) && Account::has_authenticator( $pw_only->ID ) && get_user_meta( $pw_only->ID, '_two_factor_totp_key', true ) === $pw_app && count( aiwos_tf_mails_to( $pw_only ) ) === $before + 1 );
+	$check( 'password-only needs a reason', 'reason_required' === Staff_Reset::send_password_reset( $pw_only, '' ) );
+
+	// upstream's own paths cannot change another user's 2FA.
+	$check( 'upstream REST: other account refused, own allowed', ! Two_Factor_Core::rest_api_can_edit_user_and_update_two_factor_options( $pw_only->ID ) && Two_Factor_Core::rest_api_can_edit_user_and_update_two_factor_options( $manager->ID ) );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	$codes_request = new WP_REST_Request( 'POST', '/' . Two_Factor_Core::REST_NAMESPACE . '/generate-backup-codes' );
+	$codes_request->set_body_params( array( 'user_id' => $pw_only->ID ) );
+	$codes_response = rest_do_request( $codes_request );
+	$check( 'administrator cannot generate another user\'s recovery codes', $codes_response->is_error() && empty( $codes_response->get_data()['codes'] ) );
+	$check( 'upstream settings removed from other users\' profiles', false === has_action( 'edit_user_profile', array( Two_Factor_Core::class, 'user_two_factor_options' ) ) && false === has_action( 'edit_user_profile_update', array( Two_Factor_Core::class, 'user_two_factor_options_update' ) ) );
+
+	// the REST guard through the real filter chain (registration and order), with a control.
+	$rest_admin = aiwos_tf_user( 'administrator' );
+	aiwos_tf_log_in( $rest_admin );
+	$blocked = apply_filters( 'rest_authentication_errors', null );
+	aiwos_tf_link_app( $rest_admin );
+	aiwos_tf_log_in( $rest_admin, 'Two_Factor_Totp' );
+	$control = apply_filters( 'rest_authentication_errors', null );
+	$check( 'REST filter chain: user without 2FA gets our error', is_wp_error( $blocked ) && 'aiwos_two_factor_required' === $blocked->get_error_code() );
+	$check( 'REST filter chain: 2FA session passes (control)', ! is_wp_error( $control ) );
+
+	// a logged-in request without a session token fails closed.
+	unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
+	$check( 'no session token: must revalidate', Enforcer::must_revalidate() );
+	do_action( 'application_password_did_authenticate', $rest_admin, null );
+	$check( 'application password: left to upstream\'s API policy', ! Enforcer::must_revalidate() );
 
 	// A1: password reset keeps 2FA and ends old sessions.
 	$pw_user = aiwos_tf_user( 'subscriber' );

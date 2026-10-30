@@ -82,6 +82,9 @@ final class Staff_Reset {
 		if ( is_multisite() && ( is_super_admin( $target->ID ) || ! is_user_member_of_blog( $target->ID ) ) ) {
 			return 'not_allowed';
 		}
+		if ( ! current_user_can( 'manage_options' ) && ! self::in_manager_scope( $target ) ) {
+			return 'not_allowed';
+		}
 		/**
 		 * Capabilities that make an account privileged: only site managers holding the same
 		 * capability may recover it. Add site-specific ones (e.g. a shop manager capability).
@@ -112,13 +115,38 @@ final class Staff_Reset {
 	}
 
 	/**
+	 * Account managers (no manage_options): only accounts whose every role they may assign,
+	 * using WordPress' own "who manages whom" setting (editable_roles). That setting only
+	 * counts when the site actually limits it for this manager; unlimited means no delegated
+	 * scope. Capabilities given to the target individually must be held by the manager too.
+	 *
+	 * @param WP_User $target Account to recover.
+	 */
+	private static function in_manager_scope( WP_User $target ): bool {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		$all      = array_keys( wp_roles()->roles );
+		$editable = array_keys( get_editable_roles() );
+		if ( ! array_diff( $all, $editable ) || ! $target->roles || array_diff( $target->roles, $editable ) ) {
+			return false;
+		}
+		foreach ( $target->caps as $cap => $granted ) {
+			if ( $granted && ! in_array( $cap, $all, true ) && ! current_user_can( $cap ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * Remove the target's 2FA and put the account in recovery: only the mailed link lets the
-	 * user link a new app. Order: revoke access, clear 2FA, recovery state, audit, mail.
+	 * user link a new app. Order: recovery state first (so the account is never open), then
+	 * revoke access, clear 2FA, audit, mail.
 	 *
 	 * @param WP_User $target         Account to recover.
 	 * @param string  $reason         How identity was verified and why (audit trail).
-	 * @param bool    $password_reset Also send the standard WordPress password reset mail.
-	 * @return string started, mail_failed, password_mail_failed, reason_required, or a check() code.
+	 * @param bool    $password_reset The password may be compromised: send the password reset
+	 *                                mail, and the link only works after a new password was set.
+	 * @return string started, error, mail_failed, password_mail_failed, reason_required, or a check() code.
 	 */
 	public static function start_recovery( WP_User $target, string $reason, bool $password_reset ): string {
 		$denied = self::check( $target );
@@ -131,9 +159,21 @@ final class Staff_Reset {
 		}
 
 		$actor = wp_get_current_user();
-		Account::revoke_access( $target->ID );
-		Account::clear_two_factor( $target->ID );
-		$token = Recovery_Token::issue( $target, $actor );
+		$token = Account::locked(
+			$target->ID,
+			static function () use ( $target, $actor, $password_reset ) {
+				// Recovery state first and only if it was stored: the account is never left open.
+				$token = Recovery_Token::issue( $target, $actor, $password_reset );
+				if ( null !== $token ) {
+					Account::revoke_access( $target->ID );
+					Account::clear_two_factor( $target->ID );
+				}
+				return $token;
+			}
+		);
+		if ( ! is_string( $token ) ) {
+			return 'error';
+		}
 
 		/**
 		 * Fires after staff started 2FA recovery for an account (audit trail).
@@ -155,7 +195,8 @@ final class Staff_Reset {
 				wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ),
 				Recovery_Token::url( $token ),
 				(int) ( Recovery_Token::TTL / HOUR_IN_SECONDS )
-			) . "\n\n" . Notifier::not_you()
+			) . ( $password_reset ? "\n\n" . __( 'You will also receive a mail to set a new password. Set the new password first; the link above only works after that.', 'aiwos-two-factor' ) : '' )
+			. "\n\n" . Notifier::not_you()
 		);
 
 		if ( ! $sent ) {
@@ -165,6 +206,36 @@ final class Staff_Reset {
 			return 'password_mail_failed';
 		}
 		return 'started';
+	}
+
+	/**
+	 * Help a user with a forgotten password only: send the standard WordPress password reset
+	 * mail. 2FA is not touched, so the next login still needs the app or a recovery code.
+	 *
+	 * @param WP_User $target Account.
+	 * @param string  $reason Why (audit trail).
+	 * @return string password_sent, password_failed, reason_required, or a check() code.
+	 */
+	public static function send_password_reset( WP_User $target, string $reason ): string {
+		$denied = self::check( $target );
+		if ( '' !== $denied ) {
+			return $denied;
+		}
+		$reason = trim( sanitize_textarea_field( $reason ) );
+		if ( '' === $reason ) {
+			return 'reason_required';
+		}
+		$actor = wp_get_current_user();
+		/**
+		 * Fires after staff sent a password reset mail for an account (audit trail).
+		 *
+		 * @param WP_User $target Account.
+		 * @param WP_User $actor  Staff member.
+		 * @param string  $reason Reason given by the staff member.
+		 */
+		do_action( 'aiwos/two-factor/password-reset-sent', $target, $actor, $reason ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- aiwos/* hook convention.
+		error_log( sprintf( '[aiwos-two-factor] staff password reset mail: user %d by user %d', $target->ID, $actor->ID ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- audit trail in the server log.
+		return true === retrieve_password( $target->user_login ) ? 'password_sent' : 'password_failed';
 	}
 
 	/**
@@ -283,6 +354,9 @@ final class Staff_Reset {
 			return 'not_allowed';
 		}
 		$reason = isset( $_POST['reason'] ) ? sanitize_textarea_field( wp_unslash( $_POST['reason'] ) ) : '';
+		if ( isset( $_POST['mode'] ) && 'password' === sanitize_key( wp_unslash( $_POST['mode'] ) ) ) {
+			return self::send_password_reset( $target, $reason );
+		}
 		return self::start_recovery( $target, $reason, ! empty( $_POST['password_reset'] ) );
 	}
 
@@ -312,9 +386,12 @@ final class Staff_Reset {
 			<p><?php esc_html_e( 'This removes the authenticator app and recovery codes, logs the user out everywhere and mails them a one-time link to link a new app. Only do this after verifying the identity of the user through a known contact channel.', 'aiwos-two-factor' ); ?></p>
 			<p><label for="aiwos-two-factor-staff-reason"><?php esc_html_e( 'How was the identity verified, and why?', 'aiwos-two-factor' ); ?></label><br>
 			<textarea name="reason" id="aiwos-two-factor-staff-reason" rows="3" cols="50" required></textarea></p>
-			<p><label><input type="checkbox" name="password_reset" value="1"> <?php esc_html_e( 'Also send a password reset mail (when the password may be compromised)', 'aiwos-two-factor' ); ?></label></p>
+			<p><label><input type="checkbox" name="password_reset" value="1"> <?php esc_html_e( 'The password may be compromised: also send a password reset mail, and only allow linking a new app after the password was changed', 'aiwos-two-factor' ); ?></label></p>
 			<?php wp_nonce_field( self::ACTION, self::NONCE_FIELD ); ?>
-			<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Reset two-factor', 'aiwos-two-factor' ); ?></button></p>
+			<p>
+				<button type="submit" name="mode" value="recovery" class="button button-primary"><?php esc_html_e( 'Reset two-factor', 'aiwos-two-factor' ); ?></button>
+				<button type="submit" name="mode" value="password" class="button"><?php esc_html_e( 'Only send a password reset mail (keeps two-factor)', 'aiwos-two-factor' ); ?></button>
+			</p>
 		</form>
 		<?php
 		return (string) ob_get_clean();
@@ -336,6 +413,8 @@ final class Staff_Reset {
 	private static function notice( string $status ): string {
 		$messages = array(
 			'started'              => __( 'Two-factor authentication was reset. The user was logged out and received a link to link a new app.', 'aiwos-two-factor' ),
+			'password_sent'        => __( 'A password reset mail was sent. Two-factor authentication was not changed.', 'aiwos-two-factor' ),
+			'password_failed'      => __( 'The password reset mail could not be sent. Check the mail log, or ask the user to use "Lost your password?".', 'aiwos-two-factor' ),
 			'mail_failed'          => __( 'Two-factor authentication was reset, but the mail with the link could not be sent. Check the mail log and reset again to send a new link.', 'aiwos-two-factor' ),
 			'password_mail_failed' => __( 'Two-factor authentication was reset and the link was sent, but the password reset mail could not be sent. Ask the user to use "Lost your password?".', 'aiwos-two-factor' ),
 			'reason_required'      => __( 'Fill in how the identity was verified.', 'aiwos-two-factor' ),
@@ -344,11 +423,12 @@ final class Staff_Reset {
 			'self'                 => __( 'You cannot reset your own two-factor authentication here.', 'aiwos-two-factor' ),
 			'not_allowed'          => __( 'Account not found, or you are not allowed to reset it.', 'aiwos-two-factor' ),
 			'invalid_nonce'        => __( 'Your session expired. Please try again.', 'aiwos-two-factor' ),
+			'error'                => __( 'Nothing was changed: the reset could not be saved. Please try again.', 'aiwos-two-factor' ),
 		);
 		if ( ! isset( $messages[ $status ] ) ) {
 			return '';
 		}
-		$type = 'started' === $status ? 'success' : 'error';
+		$type = in_array( $status, array( 'started', 'password_sent' ), true ) ? 'success' : 'error';
 		return sprintf( '<div class="notice notice-%1$s feedback feedback-%1$s" role="status"><p>%2$s</p></div>', esc_attr( $type ), esc_html( $messages[ $status ] ) );
 	}
 }

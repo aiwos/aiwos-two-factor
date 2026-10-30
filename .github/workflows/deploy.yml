@@ -20,7 +20,7 @@ jobs:
       - name: Build zip
         run: |
           mkdir -p build/aiwos-two-factor
-          rsync -a ./ build/aiwos-two-factor/ --exclude build --exclude .git --exclude .github --exclude tests --exclude phpcs.xml --exclude phpstan.neon --exclude .gitignore
+          rsync -a ./ build/aiwos-two-factor/ --exclude build --exclude .git --exclude .github --exclude tests --exclude phpcs.xml --exclude phpstan.neon --exclude .gitignore --exclude .wp-env.json
           cd build && zip -X -r "aiwos-two-factor-${{ github.event.release.tag_name }}.zip" aiwos-two-factor
 
       - name: Upload release asset

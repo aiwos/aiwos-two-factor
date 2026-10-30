@@ -47,6 +47,7 @@ Staff-assisted recovery is for a user who has neither the app nor a recovery cod
   - Grant it to account-manager roles explicitly: `wp cap add <role> aiwos_reset_two_factor`.
   - The staff member also needs `edit_user` on the target, a 2FA of their own and a proof of it from the last 10 minutes.
   - Nobody can reset their own 2FA here.
+  - **Account managers** (no `manage_options`) can only reset accounts whose every role they may assign themselves. That is WordPress' own "who manages whom" setting (`editable_roles`). It only counts when the site actually limits it for that manager: on a site that lets everyone assign every role, managers get no reset scope at all. Capabilities given to a user individually (outside their roles) must be held by the manager too. On mijn-afk, `accountbeheer` may assign every role except administrator.
   - Accounts with admin-level rights (`manage_options`, `promote_users`, `edit_users`, or the reset capability) can only be reset by a site manager who holds those rights too. Sites add their own sensitive capabilities with the filter `aiwos/two-factor/privileged-caps`.
   - On multisite only members of the current site can be reset, never a network administrator.
   - The filter `aiwos/two-factor/can-reset` has the final say.
@@ -54,17 +55,19 @@ Staff-assisted recovery is for a user who has neither the app nor a recovery cod
   - wp-admin: "Reset two-factor" on Users opens a confirmation screen.
   - Without wp-admin: the shortcode `[two-factor-staff-reset]` on a page that only account managers can open.
   - Both submit by POST and require a written note on how the identity was verified.
-- **What happens, in this order:**
-  1. All sessions and application passwords of the user are revoked.
-  2. Their 2FA data, recovery codes and pending login challenges are cleared. This works with any provider switched off.
-  3. The account is put in recovery.
+- **What happens, in this order** (under a per-account database lock, so a reset, a link being used and an app being linked never interleave):
+  1. The account is put in recovery. If that cannot be stored, nothing else happens.
+  2. All sessions and application passwords of the user are revoked.
+  3. Their 2FA data, recovery codes and pending login challenges are cleared. This works with any provider switched off.
   4. The hook `aiwos/two-factor/recovery-started` (target, actor, note) fires for the audit trail, and the start and completion are written to the server error log (user IDs only).
   5. A one-time link, valid for 24 hours, is mailed to the account's **existing** address.
-  6. Optionally, a standard WordPress password reset mail is sent as well (use it when the password may be compromised).
+  6. When the password may be compromised, the staff member ticks that box: a standard password reset mail is sent too, and the recovery link only works after the password was reset through WordPress' "lost password" flow (a hash upgrade at login does not count). Resetting it to the same password is refused.
+- **Only a forgotten password:** the second button sends just the standard password reset mail and leaves 2FA as it is.
+- **No other way to change someone else's 2FA:** upstream's own REST endpoints, settings actions and profile screen are limited to the user's own account. Staff never see or set another user's secret or recovery codes.
 - **The password alone is not enough.**
   - While the account is in recovery, the user can log in with the password but cannot link an app until they open the mailed link. The condition filter cannot exempt an account in recovery.
-  - Opening the link only shows a "Continue" button; the link is used by that POST, so mail scanners cannot use it. When the user is logged out, the link leads to the login screen without the token in the URL, and they open it again after logging in.
-  - The link is stored only as a keyed hash, works once (also when two requests race), and is bound to the session that uses it.
+  - Opening the link only shows a "Continue" button; the link is used by that POST, so mail scanners cannot use it. The page is sent with `Referrer-Policy: no-referrer`, so the token is not passed on. When the user is logged out, the link leads to the login screen without the token in the URL, and they open it again after logging in.
+  - The link is stored only as a keyed hash, works once (also when two requests race), and is bound to the session that uses it. Each recovery has its own id: a link from an earlier recovery never unlocks a later one.
   - After the app is linked, the recovery ends and the user gets a mail.
 - **Not automated, on purpose.** Staff verify the identity through a known contact channel, for example a call-back on a number already on file. A request from a new e-mail address is not proof. Changing the account's e-mail address is a separate process.
 - **For DUS-I:** `Staff_Reset::start_recovery( $target, $note, $password_reset )` holds all checks and is the entry point for a future Gravity Flow step.
@@ -95,7 +98,9 @@ Users who must use 2FA are those for whom `aiwos/force-two-factor/force-2fa-cond
 
 Only a plain request for the setup page counts: other query variables (`?p=`, `?s=`, ...) on `/2fa/` are redirected like any other page. Users who only need to revalidate cannot POST anything, also not on `/2fa/`; they confirm their code first.
 
-**Users with 2FA whose browser session was not opened with it** (for example a session from before 2FA was set up) are sent to upstream's revalidation first. REST and AJAX requests from such a session get `403`.
+The guard runs again on `parse_request`, when WordPress knows what it will serve, so a URL that only looks like REST (`?rest_route=0`) cannot skip it.
+
+**Users with 2FA whose browser session was not opened with it** (for example a session from before 2FA was set up) are sent to upstream's revalidation first. REST and AJAX requests from such a session get `403`. A logged-in request without a session cookie fails closed; application passwords follow upstream's API-login policy.
 
 Which methods count as a second factor is decided by upstream Two Factor and the site's provider settings (app, email codes, recovery codes, SMS where installed). Any enabled method counts as proof for changes. Sites decide which methods to enable.
 
@@ -148,6 +153,11 @@ Run from a **local** host site where upstream Two Factor and this plugin are act
 # Live-WordPress checks, including runs with providers switched off site-wide.
 # Creates and removes throwaway users; mails are captured, not sent.
 web/app/plugins/aiwos-two-factor/tests/run.sh
+
+# Real HTTP checks of the enforcement boundary (curl; creates and removes a throwaway user)
+BASE_URL=https://<site>.ddev.site WP="ddev wp" WP_DIR=/wp tests/http.sh
+
+# CI runs tests/run.sh and tests/http.sh against a clean WordPress (@wordpress/env, see .wp-env.json).
 
 # Browser test (see the header of the file for the throwaway accounts it needs)
 NODE_PATH=/www/e2e/node_modules BASE_URL=https://<site>.ddev.site E2E_USER=... node tests/e2e-enrollment.cjs

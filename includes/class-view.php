@@ -29,6 +29,7 @@ final class View {
 			'recovery_ok'       => array( 'info', __( 'Link accepted. Now link your new authenticator app.', 'aiwos-two-factor' ) ),
 			'recovery_invalid'  => array( 'error', __( 'This link is not valid (any more). Contact your account manager for a new one.', 'aiwos-two-factor' ) ),
 			'recovery_required' => array( 'error', __( 'Open the link from the e-mail first.', 'aiwos-two-factor' ) ),
+			'password_first'    => array( 'error', __( 'Set a new password first, then log in again and open the recovery link once more.', 'aiwos-two-factor' ) ),
 			'invalid_code'      => array( 'error', __( 'That code is not valid. Enter the 6 digits from the app; check the time on your phone if it keeps failing.', 'aiwos-two-factor' ) ),
 			'expired'           => array( 'error', __( 'The setup took too long. Scan the new QR code and try again.', 'aiwos-two-factor' ) ),
 			'invalid_nonce'     => array( 'error', __( 'Your session expired. Please try again.', 'aiwos-two-factor' ) ),
@@ -50,7 +51,8 @@ final class View {
 		if ( ! headers_sent() ) {
 			nocache_headers();
 			send_frame_options_header();
-			header( 'Referrer-Policy: same-origin' );
+			// The recovery link carries a token in its URL: never pass it on, not even to own assets.
+			header( 'Referrer-Policy: no-referrer' );
 		}
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 			define( 'DONOTCACHEPAGE', true );

@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-foreach ( array( 'plugin', 'account', 'notifier', 'recovery-token', 'view', 'enrollment', 'enforcer', 'setup-page', 'staff-reset' ) as $aiwos_two_factor_file ) {
+foreach ( array( 'plugin', 'account', 'notifier', 'recovery-token', 'view', 'enrollment', 'enforcer', 'setup-page', 'staff-reset', 'upstream-guard' ) as $aiwos_two_factor_file ) {
 	require_once __DIR__ . '/includes/class-' . $aiwos_two_factor_file . '.php';
 }
 

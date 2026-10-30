@@ -30,3 +30,30 @@ jobs:
 
       - name: phpcs
         run: "$(composer global config bin-dir --absolute --quiet)/phpcs" --standard=phpcs.xml --extensions=php .
+
+  integration:
+    name: Live WordPress tests (upstream Two Factor 0.17.0)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Start WordPress
+        run: npx --yes @wordpress/env start
+
+      - name: Run tests (incl. runs with providers switched off)
+        env:
+          WP: npx --yes @wordpress/env run cli wp
+          DIR: wp-content/plugins/aiwos-two-factor
+        run: tests/run.sh
+
+      - name: HTTP checks of the enforcement boundary
+        env:
+          BASE_URL: http://localhost:8888
+          WP: npx --yes @wordpress/env run cli wp
+        run: tests/http.sh

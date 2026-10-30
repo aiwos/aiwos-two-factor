@@ -10,6 +10,7 @@ namespace Aiwos\TwoFactor;
 use Two_Factor_Backup_Codes;
 use Two_Factor_Core;
 use Two_Factor_Totp;
+use WP_Session_Tokens;
 use WP_User;
 
 defined( 'ABSPATH' ) || exit;
@@ -115,8 +116,9 @@ final class Enrollment {
 			return 'invalid_nonce';
 		}
 		if ( 'redeem' === $action ) {
-			$token = is_string( $input['token'] ?? null ) ? $input['token'] : '';
-			return Recovery_Token::redeem( $token ) ? 'recovery_ok' : 'recovery_invalid';
+			$token  = is_string( $input['token'] ?? null ) ? $input['token'] : '';
+			$result = Recovery_Token::redeem( $token );
+			return 'ok' === $result ? 'recovery_ok' : ( 'password_first' === $result ? 'password_first' : 'recovery_invalid' );
 		}
 		// During a staff recovery nothing changes before the mailed link was opened in this session.
 		if ( ! Recovery_Token::session_may_enroll() ) {
@@ -181,10 +183,45 @@ final class Enrollment {
 			return 'invalid_code';
 		}
 
-		$replacing  = Account::has_authenticator( $user->ID );
-		$recovering = Recovery_Token::is_pending( $user->ID );
-		Account::commit_authenticator( $user->ID, $key, (int) $tick, $replacing );
-		Recovery_Token::complete( $user->ID );
+		// Commit under the account lock, on fresh state: this session must still exist (a staff
+		// reset logs everyone out), the recovery must still be the one this session unlocked,
+		// and the pending secret must still be the one that was just proven.
+		$token  = wp_get_session_token();
+		$result = Account::locked(
+			$user->ID,
+			static function () use ( $user, $key, $tick, $token ) {
+				if ( '' !== $token && null === WP_Session_Tokens::get_instance( $user->ID )->get( $token ) ) {
+					return array( 'status' => 'recovery_required' );
+				}
+				if ( ! Recovery_Token::session_may_enroll() ) {
+					return array( 'status' => 'recovery_required' );
+				}
+				if ( Account::pending_secret( $user->ID ) !== $key ) {
+					return array( 'status' => 'expired' );
+				}
+				$recovery_id = Recovery_Token::current_id( $user->ID );
+				$replacing   = Account::has_authenticator( $user->ID );
+				if ( ! Account::commit_authenticator( $user->ID, $key, (int) $tick, $replacing ) ) {
+					return array( 'status' => 'error' );
+				}
+				if ( null !== $recovery_id ) {
+					Recovery_Token::complete( $user->ID, $recovery_id );
+				}
+				return array(
+					'status'     => 'ok',
+					'replacing'  => $replacing,
+					'recovering' => null !== $recovery_id,
+				);
+			}
+		);
+		if ( ! is_array( $result ) ) {
+			return 'error';
+		}
+		if ( 'ok' !== $result['status'] ) {
+			return $result['status'];
+		}
+		$replacing  = $result['replacing'];
+		$recovering = $result['recovering'];
 		if ( $recovering ) {
 			error_log( sprintf( '[aiwos-two-factor] staff recovery completed: user %d linked a new app', $user->ID ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- audit trail in the server log.
 		}
@@ -222,6 +259,14 @@ final class Enrollment {
 		if ( ! Recovery_Token::session_may_enroll() ) {
 			if ( Recovery_Token::is_expired( $user->ID ) ) {
 				return $html . View::message( __( 'Your recovery link has expired. Contact your account manager for a new one.', 'aiwos-two-factor' ) );
+			}
+			if ( Recovery_Token::needs_new_password( $user->ID ) ) {
+				return $html . sprintf(
+					'<p class="aiwos-two-factor__message">%s <a href="%s">%s</a></p>',
+					esc_html__( 'First set a new password, using the password mail we sent you or the link below. Then log in again and open the recovery link once more.', 'aiwos-two-factor' ),
+					esc_url( wp_lostpassword_url() ),
+					esc_html__( 'Set a new password', 'aiwos-two-factor' )
+				);
 			}
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only shown back in a POST form; redeemed after a nonce check.
 			$token = isset( $_GET[ Recovery_Token::QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ Recovery_Token::QUERY_ARG ] ) ) : '';

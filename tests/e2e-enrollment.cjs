@@ -5,6 +5,7 @@
  *           holding aiwos_reset_two_factor; STAFF_PAGE = path of a page with [two-factor-staff-reset]
  *   TARGET  regular user with an app linked      (TARGET_USER / TARGET_PASS / TARGET_EMAIL)
  *   MAILPIT_URL  local Mailpit, e.g. https://<site>.ddev.site:8026
+ *   APP_USER / APP_PASS  administrator without 2FA and an application password of it
  *
  *   NODE_PATH=/www/e2e/node_modules BASE_URL=https://<site>.ddev.site ... node tests/e2e-enrollment.cjs
  */
@@ -44,19 +45,24 @@ async function freshTotp(secret) {
 }
 
 let failures = 0;
+let lastCheck = 'start';
 function check(name, ok, detail = '') {
+  lastCheck = name;
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok || !detail ? '' : ` -- ${detail}`}`);
   if (!ok) failures++;
 }
 
 const path = (page) => new URL(page.url()).pathname;
+// Close a page's browser context once a scenario step is done with it (keeps the site unloaded).
+const done = (page) => page.context().close().catch(() => {});
 
 async function login(browser, user, pass) {
   const page = await (await browser.newContext({ ignoreHTTPSErrors: true })).newPage();
   await page.goto(`${LOGIN_URL}?redirect_to=${encodeURIComponent(`${BASE_URL}/`)}`);
   await page.fill('#user_login', user);
   await page.fill('#user_pass', pass);
-  await Promise.all([page.waitForNavigation({ waitUntil: 'domcontentloaded' }), page.click('#wp-submit')]);
+  // The local site can be slow under load: wait up to 60 s for the next page.
+  await Promise.all([page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }), page.click('#wp-submit')]);
   return page;
 }
 
@@ -105,12 +111,16 @@ async function userScenario(browser) {
   check('"/wp-json/" in the query string does not skip the guard (GET)', path(page) === '/2fa/', page.url());
   const sneaky = await page.request.post(`${BASE_URL}/?x=/wp-json/`, { form: { probe: '1' }, maxRedirects: 0 });
   check('"/wp-json/" in the query string does not skip the guard (POST)', sneaky.status() === 403, String(sneaky.status()));
+  for (const url of [`${BASE_URL}/?rest_route=0`, `${BASE_URL}/wp-json/?rest_route=`]) {
+    const viaGet = await page.goto(url);
+    check(`not-really-REST URL is guarded (GET ${new URL(url).pathname}${new URL(url).search})`, path(page) === '/2fa/', `${viaGet.status()} ${page.url()}`);
+    const viaPost = await page.request.post(url, { form: { probe: '1' }, maxRedirects: 0 });
+    check(`not-really-REST URL is guarded (POST ${new URL(url).pathname}${new URL(url).search})`, viaPost.status() === 403, String(viaPost.status()));
+  }
   const stray = await page.request.post(`${BASE_URL}/2fa/`, { form: { gform_submit: '1' }, maxRedirects: 0 });
   check('other POSTs to /2fa/ are refused', stray.status() === 403, String(stray.status()));
   const mixed = await page.request.post(`${BASE_URL}/2fa/`, { form: { aiwos_two_factor_action: 'enroll', gform_submit: '1' }, maxRedirects: 0 });
   check('own form POST to /2fa/ ends in our redirect before other plugins run', [302, 303].includes(mixed.status()) && (mixed.headers().location || '').includes('aiwos-2fa=invalid_nonce'), `${mixed.status()} ${mixed.headers().location || ''}`);
-  const rest = await page.request.get(`${BASE_URL}/wp-json/wp/v2/users/me`);
-  check('REST refused for user without 2FA', rest.status() === 401 || rest.status() === 403, String(rest.status()));
 
   const setup = await page.goto(`${BASE_URL}/2fa/?utm=x`);
   check('setup page with query string does not loop', path(page) === '/2fa/');
@@ -132,6 +142,7 @@ async function userScenario(browser) {
   const second = await login(browser, env.E2E_USER, env.E2E_PASS);
   check('next login asks for the code', await second.waitForSelector('#authcode', { timeout: 10000 }).then(() => true, () => false));
   check('login with the app succeeds', await secondFactor(second, await freshTotp(secret)));
+  await done(second);
 
   // Lost phone: recovery code, then replace the app on the frontend.
   const lost = await login(browser, env.E2E_USER, env.E2E_PASS);
@@ -143,15 +154,30 @@ async function userScenario(browser) {
   check('replace shows a new QR code with cancel', (await lost.locator('#aiwos-two-factor-authcode').count()) === 1 && (await lost.locator('form.aiwos-two-factor__cancel').count()) === 1);
   const replaced = await enrollOnPage(lost);
   check('new app replaces the old one', (replaced.response.headers().location || '').includes('aiwos-2fa=replaced'));
+  await done(lost);
+  await done(page);
 
   const again = await login(browser, env.E2E_USER, env.E2E_PASS);
   check('old app is refused', (await secondFactor(again, await freshTotp(secret))) === false);
+  await done(again);
   const fresh = await login(browser, env.E2E_USER, env.E2E_PASS);
   check('new app works', await secondFactor(fresh, await freshTotp(replaced.secret)));
+  await done(fresh);
   const used = await login(browser, env.E2E_USER, env.E2E_PASS);
   await used.locator('.backup-methods-wrap a[href*="provider=Two_Factor_Backup_Codes"]').click({ timeout: 3000 }).catch(() => {});
   await used.waitForLoadState('domcontentloaded');
   check('old recovery codes no longer work', (await used.locator('.backup-methods-wrap a[href*="Two_Factor_Backup_Codes"]').count()) === 0 && (await secondFactor(used, codes[1])) === false);
+}
+
+// Real REST request (application password) by an administrator without 2FA: our error, not just any 401/403.
+async function restScenario() {
+  const api = await request.newContext({
+    ignoreHTTPSErrors: true,
+    extraHTTPHeaders: { Authorization: `Basic ${Buffer.from(`${env.APP_USER}:${env.APP_PASS}`).toString('base64')}` },
+  });
+  const res = await api.get(`${BASE_URL}/wp-json/wp/v2/users/me`);
+  const body = await res.json().catch(() => ({}));
+  check('REST request by user without 2FA gets the 2FA error', res.status() === 403 && body.code === 'aiwos_two_factor_required', `${res.status()} ${body.code}`);
 }
 
 async function staffScenario(browser) {
@@ -160,7 +186,8 @@ async function staffScenario(browser) {
   await staff.goto(`${BASE_URL}${env.STAFF_PAGE}`);
   await staff.fill('#aiwos-two-factor-staff-account', env.TARGET_EMAIL);
   await staff.fill('#aiwos-two-factor-staff-reason', 'e2e: identity verified by call-back');
-  await submit(staff, 'form.aiwos-two-factor-staff');
+  await Promise.all([staff.waitForLoadState('domcontentloaded'), staff.locator('form.aiwos-two-factor-staff button[value="recovery"]').click()]);
+  await staff.waitForLoadState('domcontentloaded');
   check('staff reset started', staff.url().includes('aiwos-2fa-staff=started'), staff.url());
 
   // The password alone must not be enough to link a new app.
@@ -198,8 +225,9 @@ async function staffScenario(browser) {
   try {
     await userScenario(browser);
     if (env.STAFF_USER) await staffScenario(browser);
+    if (env.APP_USER) await restScenario();
   } catch (error) {
-    check('no unexpected error', false, error.message.split('\n')[0]);
+    check('no unexpected error', false, `${error.message.split('\n')[0]} (after: ${lastCheck})`);
   } finally {
     await browser.close();
   }

@@ -35,6 +35,8 @@ final class Enforcer {
 	public static function register(): void {
 		// Before parse_request and 'wp', where plugins such as Gravity Forms handle submissions.
 		add_action( 'wp_loaded', array( self::class, 'guard_frontend' ), 0 );
+		// Again once WordPress knows what it will serve, still before REST dispatch and 'wp'.
+		add_action( 'parse_request', array( self::class, 'guard_parsed' ), 1 );
 		// Backstop: what WordPress actually serves must be the setup page.
 		add_action( 'template_redirect', array( self::class, 'guard_query' ), 0 );
 		add_action( 'admin_init', array( self::class, 'guard_admin' ), 1 );
@@ -66,9 +68,15 @@ final class Enforcer {
 	 * Whether the current browser session has to confirm a code first.
 	 */
 	public static function must_revalidate(): bool {
-		return '' !== wp_get_session_token()
-			&& Two_Factor_Core::is_user_using_two_factor( get_current_user_id() )
-			&& ! Two_Factor_Core::is_current_user_session_two_factor();
+		if ( ! Two_Factor_Core::is_user_using_two_factor( get_current_user_id() ) ) {
+			return false;
+		}
+		if ( '' === wp_get_session_token() ) {
+			// No session to check. Application passwords follow upstream's API-login policy;
+			// any other login (e.g. an auth cookie sent without the logged-in cookie) fails closed.
+			return ! did_action( 'application_password_did_authenticate' );
+		}
+		return ! Two_Factor_Core::is_current_user_session_two_factor();
 	}
 
 	/**
@@ -77,9 +85,30 @@ final class Enforcer {
 	 * open for login, logout, lost password and revalidation.
 	 */
 	public static function guard_frontend(): void {
+		if ( ! self::is_rest_request() ) {
+			self::frontend_policy();
+		}
+	}
+
+	/**
+	 * Same policy after WordPress parsed the request: only what core really serves as REST
+	 * is left to the REST guard.
+	 *
+	 * @param \WP $wp Request.
+	 */
+	public static function guard_parsed( $wp ): void {
+		if ( empty( $wp->query_vars['rest_route'] ) ) {
+			self::frontend_policy();
+		}
+	}
+
+	/**
+	 * Frontend policy for a user who must set up 2FA or confirm a code.
+	 */
+	private static function frontend_policy(): void {
 		if (
 			is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST )
-			|| 'wp-login.php' === ( $GLOBALS['pagenow'] ?? '' ) || self::is_rest_request() || ! is_user_logged_in()
+			|| 'wp-login.php' === ( $GLOBALS['pagenow'] ?? '' ) || ! is_user_logged_in()
 		) {
 			return;
 		}
@@ -117,13 +146,14 @@ final class Enforcer {
 	}
 
 	/**
-	 * Whether this is a REST request (decided before WordPress parses it).
+	 * Whether this looks like a REST request before WordPress parsed it; guard_parsed() checks
+	 * the parsed result, so a wrong guess here cannot skip the policy.
 	 */
 	private static function is_rest_request(): bool {
 		// phpcs:disable WordPress.Security.ValidatedSanitizedInput, WordPress.Security.NonceVerification.Recommended -- routing only, compared, never output.
-		// Same rule as core: only a non-empty string makes WordPress serve REST.
-		if ( isset( $_GET['rest_route'] ) && is_string( $_GET['rest_route'] ) && '' !== trim( $_GET['rest_route'] ) ) {
-			return true;
+		// Same rule as core (empty(): '' and '0' are not REST); the parameter also overrides the path.
+		if ( isset( $_GET['rest_route'] ) ) {
+			return is_string( $_GET['rest_route'] ) && ! empty( $_GET['rest_route'] );
 		}
 		if ( ! get_option( 'permalink_structure' ) ) {
 			return false;

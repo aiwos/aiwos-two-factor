@@ -33,6 +33,8 @@ final class Plugin {
 		Enforcer::register();
 		Setup_Page::register();
 		Staff_Reset::register();
+		Upstream_Guard::register();
+		Recovery_Token::register();
 	}
 
 	/**

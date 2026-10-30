@@ -134,8 +134,9 @@ final class Account {
 	 * @param string $key       Proven secret.
 	 * @param int    $tick      Time step of the code that proved it.
 	 * @param bool   $replacing Whether an authenticator was already linked.
+	 * @return bool Whether the new secret was stored.
 	 */
-	public static function commit_authenticator( int $user_id, string $key, int $tick, bool $replacing ): void {
+	public static function commit_authenticator( int $user_id, string $key, int $tick, bool $replacing ): bool {
 		$enabled = array_values( array_diff( (array) get_user_meta( $user_id, '_two_factor_enabled_providers', true ), array( '' ) ) );
 		if ( $replacing ) {
 			delete_user_meta( $user_id, '_two_factor_backup_codes' );
@@ -144,11 +145,40 @@ final class Account {
 		$enabled[] = self::TOTP;
 
 		update_user_meta( $user_id, '_two_factor_totp_key', $key );
+		wp_cache_delete( $user_id, 'user_meta' );
+		if ( get_user_meta( $user_id, '_two_factor_totp_key', true ) !== $key ) {
+			return false;
+		}
 		// Mark the code as used, so it cannot be replayed at the next login.
 		update_user_meta( $user_id, '_two_factor_totp_last_successful_login', $tick );
 		update_user_meta( $user_id, '_two_factor_enabled_providers', array_values( array_unique( $enabled ) ) );
 		update_user_meta( $user_id, '_two_factor_provider', self::TOTP );
 		self::clear_pending_secret( $user_id );
+		return true;
+	}
+
+	/**
+	 * Run $callback while holding a per-account database lock, with this account's cached
+	 * meta dropped first, so it decides on the current state. Recovery issue, redeem and
+	 * enrollment commit all run under it, so they cannot interleave.
+	 *
+	 * @param int      $user_id  User ID.
+	 * @param callable $callback Work to do; its return value is passed through.
+	 * @return mixed Return value of $callback, or null when the lock could not be taken.
+	 */
+	public static function locked( int $user_id, callable $callback ) {
+		global $wpdb;
+		$lock = 'aiwos_two_factor_' . $user_id;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- a named lock has no WordPress API and must not be cached.
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 10 )', $lock ) ) ) {
+			return null;
+		}
+		try {
+			wp_cache_delete( $user_id, 'user_meta' );
+			return $callback();
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- see GET_LOCK.
+		}
 	}
 
 	/**

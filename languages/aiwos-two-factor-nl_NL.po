@@ -92,8 +92,6 @@ msgstr "Dit verwijdert de authenticator-app en de herstelcodes, logt de gebruike
 msgid "How was the identity verified, and why?"
 msgstr "Hoe is de identiteit gecontroleerd, en waarom?"
 
-msgid "Also send a password reset mail (when the password may be compromised)"
-msgstr "Ook een mail sturen om het wachtwoord opnieuw in te stellen (als het wachtwoord mogelijk gelekt is)"
 
 msgid "To reset two-factor authentication for others, confirm your own code first."
 msgstr "Bevestig eerst je eigen code om tweestapsverificatie van anderen te resetten."
@@ -195,3 +193,42 @@ msgstr "Tweestapsverificatie is gereset en de link is verstuurd, maar de mail om
 
 msgid "Set up two-factor authentication for your own account first."
 msgstr "Stel eerst tweestapsverificatie in voor je eigen account."
+
+msgid "Another user's two-factor settings can only be reset, not changed."
+msgstr "De tweestapsverificatie van een andere gebruiker kan alleen gereset worden, niet gewijzigd."
+
+msgid "Set up by the user. Only the user can change it; if they lost access, use \"Reset two-factor\" on Users."
+msgstr "Ingesteld door de gebruiker. Alleen de gebruiker kan dit wijzigen; is de gebruiker de toegang kwijt, gebruik dan \"Tweestapsverificatie resetten\" bij Gebruikers."
+
+msgid "Not set up yet. The user sets it up on their next login."
+msgstr "Nog niet ingesteld. De gebruiker stelt het in bij de volgende login."
+
+msgid "First set a new password, using the password mail we sent you or the link below. Then log in again and open the recovery link once more."
+msgstr "Stel eerst een nieuw wachtwoord in, via de wachtwoordmail die we je stuurden of de link hieronder. Log daarna opnieuw in en open de herstellink nog een keer."
+
+msgid "Set a new password"
+msgstr "Nieuw wachtwoord instellen"
+
+msgid "Set a new password first, then log in again and open the recovery link once more."
+msgstr "Stel eerst een nieuw wachtwoord in, log opnieuw in en open de herstellink nog een keer."
+
+msgid "You will also receive a mail to set a new password. Set the new password first; the link above only works after that."
+msgstr "Je ontvangt ook een mail om een nieuw wachtwoord in te stellen. Stel eerst het nieuwe wachtwoord in; de link hierboven werkt pas daarna."
+
+msgid "The password may be compromised: also send a password reset mail, and only allow linking a new app after the password was changed"
+msgstr "Het wachtwoord is mogelijk gelekt: stuur ook een mail om het wachtwoord opnieuw in te stellen, en sta het koppelen van een nieuwe app pas toe nadat het wachtwoord is gewijzigd"
+
+msgid "Only send a password reset mail (keeps two-factor)"
+msgstr "Alleen een wachtwoord-resetmail sturen (tweestapsverificatie blijft)"
+
+msgid "A password reset mail was sent. Two-factor authentication was not changed."
+msgstr "Er is een mail verstuurd om het wachtwoord opnieuw in te stellen. De tweestapsverificatie is niet gewijzigd."
+
+msgid "The password reset mail could not be sent. Check the mail log, or ask the user to use \"Lost your password?\"."
+msgstr "De mail om het wachtwoord opnieuw in te stellen kon niet worden verstuurd. Controleer het maillog, of vraag de gebruiker \"Wachtwoord vergeten?\" te gebruiken."
+
+msgid "Choose a different password than before."
+msgstr "Kies een ander wachtwoord dan voorheen."
+
+msgid "Nothing was changed: the reset could not be saved. Please try again."
+msgstr "Er is niets gewijzigd: de reset kon niet worden opgeslagen. Probeer het opnieuw."
