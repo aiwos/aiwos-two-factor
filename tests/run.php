@@ -55,13 +55,16 @@ try {
 	$check( 'pending secret expires', null === Account::pending_secret( $user->ID ) && ! str_contains( do_shortcode( '[two-factor-set-totp]' ), $pending ) );
 
 	// P6: exactly six digits.
-	$code = $pending_code( $user );
+	$code   = $pending_code( $user );
+	$secret = (string) Account::pending_secret( $user->ID );
+	// Real, valid TOTP codes of the wrong length: upstream would accept them, so only our
+	// six-digit rule rejects them.
 	foreach ( array(
-		''                    => 'empty',
-		substr( $code, 0, 1 ) => 'one digit',
-		substr( $code, 0, 5 ) => 'five digits',
-		$code . '0'           => 'seven digits',
-		'abcdef'              => 'letters',
+		''                                              => 'empty',
+		Two_Factor_Totp::calc_totp( $secret, false, 1 ) => 'valid one-digit code',
+		Two_Factor_Totp::calc_totp( $secret, false, 5 ) => 'valid five-digit code',
+		Two_Factor_Totp::calc_totp( $secret, false, 7 ) => 'valid seven-digit code',
+		'abcdef'                                        => 'letters',
 	) as $bad => $label ) {
 		$check( "code rejected: $label", 'invalid_code' === Enrollment::process( $user, 'enroll', $form( $user, 'enroll', array( 'authcode' => (string) $bad ) ) ) );
 	}
@@ -218,17 +221,26 @@ try {
 	$check( 'pending recovery is never exempt', Enforcer::must_enroll( $target ) );
 	remove_filter( Enforcer::CONDITION_FILTER, $opt_out );
 	$check( 'replace and cancel refused before the link', 'recovery_required' === Enrollment::process( $target, 'replace', $form( $target, 'replace' ) ) && 'recovery_required' === Enrollment::process( $target, 'cancel', $form( $target, 'cancel' ) ) );
+	// Opening the link keeps the token in the session (it leaves the URL).
 	$link_page = static function () use ( $token ): string {
-		$_GET[ Recovery_Token::QUERY_ARG ] = $token;
-		$html                              = do_shortcode( '[two-factor-set-totp]' );
-		unset( $_GET[ Recovery_Token::QUERY_ARG ] );
-		return $html;
+		Recovery_Token::stash( $token );
+		return do_shortcode( '[two-factor-set-totp]' );
 	};
 	$html      = $link_page();
 	$check( 'compromised password: link page asks for a new password first', str_contains( $html, esc_url( wp_lostpassword_url() ) ) && ! str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' ) );
-	$check( 'wrong token refused', 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => str_repeat( '0', 64 ) ) ) ) );
-	$check( 'redeem needs a nonce', 'invalid_nonce' === Enrollment::process( $target, 'redeem', array( 'token' => $token ) ) );
-	$check( 'compromised password: link refused and not used up until the password changed', 'password_first' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) ) && Recovery_Token::needs_new_password( $target->ID ) );
+	Recovery_Token::stash( str_repeat( '0', 64 ) );
+	$check( 'wrong token refused', 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem' ) ) );
+	Recovery_Token::stash( $token );
+	$check( 'redeem needs a nonce', 'invalid_nonce' === Enrollment::process( $target, 'redeem', array() ) );
+	$check(
+		'a token in the POST body is ignored (only the session counts)',
+		( static function () use ( $target, $form, $token ): bool {
+			Two_Factor_Core::update_current_user_session( array( 'aiwos-two-factor-link' => null ) );
+			return 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) );
+		} )()
+	);
+	Recovery_Token::stash( $token );
+	$check( 'compromised password: link refused and not used up until the password changed', 'password_first' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem' ) ) && Recovery_Token::needs_new_password( $target->ID ) );
 	wp_set_password( 'Old-known-pass-1!', $target->ID );
 	$check( 'a hash upgrade (same password stored again) does not count as a reset', Recovery_Token::needs_new_password( $target->ID ) );
 	$_POST['pass1'] = 'Old-known-pass-1!';
@@ -236,19 +248,13 @@ try {
 	do_action( 'validate_password_reset', $errors, get_userdata( $target->ID ) );
 	unset( $_POST['pass1'] );
 	$check( 'resetting to the same password is refused', in_array( 'aiwos_two_factor_same_password', $errors->get_error_codes(), true ) );
-	reset_password( get_userdata( $target->ID ), 'Unvalidated-pass-3!' . wp_generate_password( 8 ) );
-	$check( 'a password write that did not go through the reset form does not count', Recovery_Token::needs_new_password( $target->ID ) );
-	$new_pass       = 'New-pass-2!' . wp_generate_password( 8 );
-	$_POST['pass1'] = $new_pass;
-	$errors         = new WP_Error();
-	do_action( 'validate_password_reset', $errors, get_userdata( $target->ID ) );
-	unset( $_POST['pass1'] );
-	reset_password( get_userdata( $target->ID ), $new_pass );
-	$check( 'a real password reset (form + new password) meets the requirement', ! $errors->has_errors() && ! Recovery_Token::needs_new_password( $target->ID ) );
+	wp_set_password( 'Other-path-pass-3!' . wp_generate_password( 8 ), $target->ID );
+	$check( 'a real password change on any path meets the requirement', ! Recovery_Token::needs_new_password( $target->ID ) );
 	aiwos_tf_log_in( get_userdata( $target->ID ) );
 	$html = $link_page();
 	$check( 'after a new password the link page shows a confirm button, not the setup form', str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' ) );
-	$check( 'after a new password the link works, once', 'recovery_ok' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem', array( 'token' => $token ) ) ) && 'invalid' === Recovery_Token::redeem( $token ) );
+	$check( 'after a new password the link works, once', 'recovery_ok' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem' ) ) && 'invalid' === Recovery_Token::redeem( $token ) );
+	$check( 'using the link extends the recovery for a full day', (int) get_user_meta( $target->ID, Recovery_Token::META, true )['expires'] > time() + Recovery_Token::TTL - 60 );
 	$check( 'session with the link may enroll', Recovery_Token::session_may_enroll() );
 	$link_code  = $pending_code( $target );
 	$link_token = wp_get_session_token();
@@ -331,6 +337,62 @@ try {
 	$own_response = rest_do_request( $own_request );
 	global $wpdb;
 	$check( 'upstream REST write on own account still works, lock released after', ! $own_response->is_error() && ! empty( $own_response->get_data()['codes'] ) && '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', 'aiwos_two_factor_' . $admin->ID ) ) );
+	// Authenticated before a staff reset, dispatched after it: upstream writes must be refused.
+	$racer = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_link_app( $racer );
+	$racer_token = aiwos_tf_log_in( $racer, 'Two_Factor_Totp' );
+	$racer_auth  = $_COOKIE[ LOGGED_IN_COOKIE ];
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	Staff_Reset::start_recovery( $racer, 'Race test', false );
+	wp_set_current_user( $racer->ID );
+	$_COOKIE[ LOGGED_IN_COOKIE ] = $racer_auth;
+	$upstream_totp               = static function ( WP_User $who ): WP_REST_Response {
+		$key     = Two_Factor_Totp::generate_key();
+		$request = new WP_REST_Request( 'POST', '/' . Two_Factor_Core::REST_NAMESPACE . '/totp' );
+		$request->set_body_params(
+			array(
+				'user_id'         => $who->ID,
+				'key'             => $key,
+				'code'            => Two_Factor_Totp::calc_totp( $key ),
+				'enable_provider' => true,
+			)
+		);
+		return rest_do_request( $request );
+	};
+	$late                        = $upstream_totp( $racer );
+	$check( 'upstream write from a session revoked by a reset is refused', null === WP_Session_Tokens::get_instance( $racer->ID )->get( $racer_token ) && $late->is_error() && 'aiwos_two_factor_required' === ( $late->get_data()['code'] ?? '' ) && '' === get_user_meta( $racer->ID, '_two_factor_totp_key', true ) );
+	$mixed_key     = Two_Factor_Totp::generate_key();
+	$mixed_request = new WP_REST_Request( 'POST', '/TWO-FACTOR/1.0/totp' );
+	$mixed_request->set_body_params(
+		array(
+			'user_id'         => $racer->ID,
+			'key'             => $mixed_key,
+			'code'            => Two_Factor_Totp::calc_totp( $mixed_key ),
+			'enable_provider' => true,
+		)
+	);
+	$mixed = rest_do_request( $mixed_request );
+	$check( 'same, with a mixed-case route', 'aiwos_two_factor_required' === ( $mixed->get_data()['code'] ?? '' ) && '' === get_user_meta( $racer->ID, '_two_factor_totp_key', true ) );
+	aiwos_tf_log_in( $racer );
+	$fresh_session = $upstream_totp( $racer );
+	$check( 'upstream write during a recovery whose link was not used is refused', $fresh_session->is_error() && 403 === $fresh_session->get_status() && '' === get_user_meta( $racer->ID, '_two_factor_totp_key', true ) );
+	$check( 'account lock released after a refused upstream write', '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', 'aiwos_two_factor_' . $racer->ID ) ) );
+
+	// A staff member whose own login was revoked meanwhile cannot finish a reset.
+	$victim      = aiwos_tf_user( 'subscriber' );
+	$victim_key  = aiwos_tf_link_app( $victim );
+	$admin_token = aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	// Revoke the staff session after the initial check has passed, before the lock is taken.
+	$revoke_in_between = static function ( $value ) use ( $admin, $admin_token ) {
+		WP_Session_Tokens::get_instance( $admin->ID )->destroy( $admin_token );
+		return $value;
+	};
+	add_filter( 'sanitize_textarea_field', $revoke_in_between );
+	$status = Staff_Reset::start_recovery( $victim, 'Revoked actor test', false );
+	remove_filter( 'sanitize_textarea_field', $revoke_in_between );
+	$check( 'staff session revoked between check and lock: refused, nothing changed', 'revalidate' === $status && get_user_meta( $victim->ID, '_two_factor_totp_key', true ) === $victim_key && ! Recovery_Token::is_pending( $victim->ID ) );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+
 	$check( 'upstream settings removed from other users\' profiles', false === has_action( 'edit_user_profile', array( Two_Factor_Core::class, 'user_two_factor_options' ) ) && false === has_action( 'edit_user_profile_update', array( Two_Factor_Core::class, 'user_two_factor_options_update' ) ) );
 
 	// the REST guard through the real filter chain (registration and order), with a control.
@@ -348,6 +410,55 @@ try {
 	$check( 'no session token: must revalidate', Enforcer::must_revalidate() );
 	do_action( 'application_password_did_authenticate', $rest_admin, null );
 	$check( 'application password: left to upstream\'s API policy', ! Enforcer::must_revalidate() );
+
+	// E-mail address changed recently: managers may not reset; a site manager may, and the
+	// previous address is told.
+	$moved = aiwos_tf_user( 'subscriber' );
+	$old   = $moved->user_email;
+	wp_update_user(
+		array(
+			'ID'         => $moved->ID,
+			'user_email' => 'moved-' . $moved->user_email,
+		)
+	);
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	$check( 'e-mail changed recently: account manager refused', 'email_recently_changed' === Staff_Reset::start_recovery( get_userdata( $moved->ID ), 'Email test', false ) && ! Recovery_Token::is_pending( $moved->ID ) );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	$before_mails = count( $GLOBALS['aiwos_tf_test']['mails'] );
+	$check( 'e-mail changed recently: site manager allowed, previous address told', 'started' === Staff_Reset::start_recovery( get_userdata( $moved->ID ), 'Email test', false ) && in_array( $old, array_column( array_slice( $GLOBALS['aiwos_tf_test']['mails'], $before_mails ), 'to' ), true ) );
+
+	// A setup page rendered from a session that a reset revoked creates no secret, and a
+	// secret from before a recovery is not used in it.
+	$slow       = aiwos_tf_user( 'subscriber' );
+	$slow_token = aiwos_tf_log_in( $slow );
+	$slow_auth  = $_COOKIE[ LOGGED_IN_COOKIE ];
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	Staff_Reset::start_recovery( $slow, 'Render race test', false );
+	wp_set_current_user( $slow->ID );
+	$_COOKIE[ LOGGED_IN_COOKIE ] = $slow_auth;
+	$check( 'render from a revoked session creates no secret', ! str_contains( do_shortcode( '[two-factor-set-totp]' ), 'name="authcode"' ) && null === Account::pending_secret( $slow->ID ) );
+	$early = aiwos_tf_user( 'subscriber' );
+	Account::set_pending_secret( $early->ID, Two_Factor_Totp::generate_key() );
+	Recovery_Token::issue( $early, $admin, false );
+	$check( 'a secret from before a recovery is not used in it', null === Account::pending_secret( $early->ID ) );
+
+	// Session revoked after the first checks, before the new secret is stored ("replace").
+	$swap       = aiwos_tf_user( 'subscriber' );
+	$swap_key   = aiwos_tf_link_app( $swap );
+	$swap_token = aiwos_tf_log_in( $swap, 'Two_Factor_Totp' );
+	// Revoke right before the account lock is taken: after all checks outside the lock.
+	$revoke_mid = static function ( $query ) use ( $swap, $swap_token ) {
+		if ( str_contains( $query, 'GET_LOCK' ) && str_contains( $query, 'aiwos_two_factor_' . $swap->ID ) ) {
+			WP_Session_Tokens::get_instance( $swap->ID )->destroy( $swap_token );
+		}
+		return $query;
+	};
+	add_filter( 'query', $revoke_mid );
+	$swap_status = Enrollment::process( $swap, 'replace', $form( $swap, 'replace' ) );
+	remove_filter( 'query', $revoke_mid );
+	$check( 'session revoked before the new secret is stored: refused', 'recovery_required' === $swap_status && null === Account::pending_secret( $swap->ID ) && get_user_meta( $swap->ID, '_two_factor_totp_key', true ) === $swap_key );
+
+	$check( 'Site Health: account lock works', 'good' === Plugin::lock_health_test()['status'] );
 
 	// A1: password reset keeps 2FA and ends old sessions.
 	$pw_user = aiwos_tf_user( 'subscriber' );

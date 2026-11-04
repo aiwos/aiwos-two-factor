@@ -8,6 +8,7 @@
 namespace Aiwos\TwoFactor;
 
 use Two_Factor_Core;
+use WP_Session_Tokens;
 use WP_User;
 
 defined( 'ABSPATH' ) || exit;
@@ -34,6 +35,16 @@ final class Staff_Reset {
 	private const PRIVILEGED  = array( 'manage_options', 'promote_users', 'edit_users', self::CAP );
 
 	/**
+	 * Last e-mail change of an account: array{time: int, previous: string}.
+	 */
+	public const EMAIL_CHANGE_META = '_aiwos_two_factor_email_changed';
+
+	/**
+	 * How long after an e-mail change account managers may not reset.
+	 */
+	private const EMAIL_CHANGE_WINDOW = 7 * DAY_IN_SECONDS;
+
+	/**
 	 * A reset needs a 2FA proof from the last 10 minutes (stricter than upstream's 20).
 	 */
 	private const PROOF_MAX_AGE = 10 * MINUTE_IN_SECONDS;
@@ -49,6 +60,41 @@ final class Staff_Reset {
 		add_action( 'admin_notices', array( self::class, 'render_admin_notice' ) );
 		add_shortcode( self::SHORTCODE, array( self::class, 'render_shortcode' ) );
 		add_action( 'template_redirect', array( self::class, 'handle_frontend_post' ), 0 );
+		add_action( 'profile_update', array( self::class, 'remember_email_change' ), 10, 2 );
+	}
+
+	/**
+	 * Remember when an account's e-mail address changed, and the previous address: a reset
+	 * right after such a change could send the recovery link to whoever changed it.
+	 *
+	 * @param int   $user_id       User ID.
+	 * @param mixed $old_user_data User before the update.
+	 */
+	public static function remember_email_change( $user_id, $old_user_data ): void {
+		$user = get_userdata( (int) $user_id );
+		if ( $user && $old_user_data instanceof WP_User && strtolower( $old_user_data->user_email ) !== strtolower( $user->user_email ) ) {
+			update_user_meta(
+				$user->ID,
+				self::EMAIL_CHANGE_META,
+				array(
+					'time'     => time(),
+					'previous' => $old_user_data->user_email,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Previous address when the e-mail address changed recently, else ''.
+	 *
+	 * @param WP_User $user Account.
+	 */
+	private static function recent_previous_email( WP_User $user ): string {
+		$change = get_user_meta( $user->ID, self::EMAIL_CHANGE_META, true );
+		if ( ! is_array( $change ) || (int) ( $change['time'] ?? 0 ) < time() - self::EMAIL_CHANGE_WINDOW ) {
+			return '';
+		}
+		return (string) ( $change['previous'] ?? '' );
 	}
 
 	/**
@@ -146,7 +192,8 @@ final class Staff_Reset {
 	 * @param string  $reason         How identity was verified and why (audit trail).
 	 * @param bool    $password_reset The password may be compromised: send the password reset
 	 *                                mail, and the link only works after a new password was set.
-	 * @return string started, error, mail_failed, password_mail_failed, reason_required, or a check() code.
+	 * @return string started, error, mail_failed, password_mail_failed, reason_required,
+	 *                email_recently_changed, or a check() code.
 	 */
 	public static function start_recovery( WP_User $target, string $reason, bool $password_reset ): string {
 		$denied = self::check( $target );
@@ -157,11 +204,24 @@ final class Staff_Reset {
 		if ( '' === $reason ) {
 			return 'reason_required';
 		}
+		// Right after an e-mail change the link could go to whoever changed it: account
+		// managers may not reset then; a site manager may, and the previous address is told.
+		$previous_email = self::recent_previous_email( $target );
+		if ( '' !== $previous_email && ! current_user_can( 'manage_options' ) ) {
+			return 'email_recently_changed';
+		}
 
 		$actor = wp_get_current_user();
 		$token = Account::locked(
 			$target->ID,
 			static function () use ( $target, $actor, $password_reset ) {
+				// The staff member was checked before the lock; their own login may have been
+				// revoked since. Recheck their session and 2FA proof on fresh state.
+				wp_cache_delete( $actor->ID, 'user_meta' );
+				$session = wp_get_session_token();
+				if ( '' === $session || null === WP_Session_Tokens::get_instance( $actor->ID )->get( $session ) || ! Account::has_recent_proof( self::PROOF_MAX_AGE ) ) {
+					return 'revalidate';
+				}
 				// Recovery state first and only if it was stored: the account is never left open.
 				$token = Recovery_Token::issue( $target, $actor, $password_reset );
 				if ( null !== $token ) {
@@ -171,6 +231,9 @@ final class Staff_Reset {
 				return $token;
 			}
 		);
+		if ( 'revalidate' === $token ) {
+			return 'revalidate';
+		}
 		if ( ! is_string( $token ) ) {
 			return 'error';
 		}
@@ -199,6 +262,14 @@ final class Staff_Reset {
 			. "\n\n" . Notifier::not_you()
 		);
 
+		if ( '' !== $previous_email && is_email( $previous_email ) && strtolower( $previous_email ) !== strtolower( $target->user_email ) ) {
+			$site = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+			wp_mail(
+				$previous_email,
+				sprintf( '[%s] %s', $site, __( 'Two-factor authentication was reset', 'aiwos-two-factor' ) ),
+				__( 'The two-factor authentication of an account that recently used this e-mail address was reset. If you did not ask for this, contact us right away.', 'aiwos-two-factor' ) . "\n\n" . home_url( '/' )
+			);
+		}
 		if ( ! $sent ) {
 			return 'mail_failed';
 		}
@@ -412,18 +483,19 @@ final class Staff_Reset {
 	 */
 	private static function notice( string $status ): string {
 		$messages = array(
-			'started'              => __( 'Two-factor authentication was reset. The user was logged out and received a link to link a new app.', 'aiwos-two-factor' ),
-			'password_sent'        => __( 'A password reset mail was sent. Two-factor authentication was not changed.', 'aiwos-two-factor' ),
-			'password_failed'      => __( 'The password reset mail could not be sent. Check the mail log, or ask the user to use "Lost your password?".', 'aiwos-two-factor' ),
-			'mail_failed'          => __( 'Two-factor authentication was reset, but the mail with the link could not be sent. Check the mail log and reset again to send a new link.', 'aiwos-two-factor' ),
-			'password_mail_failed' => __( 'Two-factor authentication was reset and the link was sent, but the password reset mail could not be sent. Ask the user to use "Lost your password?".', 'aiwos-two-factor' ),
-			'reason_required'      => __( 'Fill in how the identity was verified.', 'aiwos-two-factor' ),
-			'revalidate'           => __( 'Confirm your own two-factor code first.', 'aiwos-two-factor' ),
-			'own_2fa_required'     => __( 'Set up two-factor authentication for your own account first.', 'aiwos-two-factor' ),
-			'self'                 => __( 'You cannot reset your own two-factor authentication here.', 'aiwos-two-factor' ),
-			'not_allowed'          => __( 'Account not found, or you are not allowed to reset it.', 'aiwos-two-factor' ),
-			'invalid_nonce'        => __( 'Your session expired. Please try again.', 'aiwos-two-factor' ),
-			'error'                => __( 'Nothing was changed: the reset could not be saved. Please try again.', 'aiwos-two-factor' ),
+			'started'                => __( 'Two-factor authentication was reset. The user was logged out and received a link to link a new app.', 'aiwos-two-factor' ),
+			'password_sent'          => __( 'A password reset mail was sent. Two-factor authentication was not changed.', 'aiwos-two-factor' ),
+			'password_failed'        => __( 'The password reset mail could not be sent. Check the mail log, or ask the user to use "Lost your password?".', 'aiwos-two-factor' ),
+			'mail_failed'            => __( 'Two-factor authentication was reset, but the mail with the link could not be sent. Check the mail log and reset again to send a new link.', 'aiwos-two-factor' ),
+			'password_mail_failed'   => __( 'Two-factor authentication was reset and the link was sent, but the password reset mail could not be sent. Ask the user to use "Lost your password?".', 'aiwos-two-factor' ),
+			'reason_required'        => __( 'Fill in how the identity was verified.', 'aiwos-two-factor' ),
+			'revalidate'             => __( 'Confirm your own two-factor code first.', 'aiwos-two-factor' ),
+			'own_2fa_required'       => __( 'Set up two-factor authentication for your own account first.', 'aiwos-two-factor' ),
+			'self'                   => __( 'You cannot reset your own two-factor authentication here.', 'aiwos-two-factor' ),
+			'not_allowed'            => __( 'Account not found, or you are not allowed to reset it.', 'aiwos-two-factor' ),
+			'invalid_nonce'          => __( 'Your session expired. Please try again.', 'aiwos-two-factor' ),
+			'error'                  => __( 'Nothing was changed: the reset could not be saved. Please try again.', 'aiwos-two-factor' ),
+			'email_recently_changed' => __( 'The e-mail address of this account changed in the last 7 days. Ask a site administrator to do this reset.', 'aiwos-two-factor' ),
 		);
 		if ( ! isset( $messages[ $status ] ) ) {
 			return '';

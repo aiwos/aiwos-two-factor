@@ -62,9 +62,18 @@ final class Enrollment {
 		$url = $on_setup_page ? Setup_Page::url() : (string) get_permalink( get_queried_object_id() );
 
 		// phpcs:disable WordPress.Security.NonceVerification -- forms are verified in process().
-		if ( isset( $_GET[ Recovery_Token::QUERY_ARG ] ) && ! is_user_logged_in() ) {
-			// Log in first, without carrying the token into the login URL; the user then opens the link again.
-			wp_safe_redirect( wp_login_url( $url ) );
+		if ( isset( $_GET[ Recovery_Token::QUERY_ARG ] ) ) {
+			if ( ! is_user_logged_in() ) {
+				// Log in first, without carrying the token into the login URL; the user then opens the link again.
+				wp_safe_redirect( wp_login_url( $url ) );
+				exit;
+			}
+			// Keep the token in the session and drop it from the URL before any page (or script) loads.
+			$token = sanitize_text_field( wp_unslash( $_GET[ Recovery_Token::QUERY_ARG ] ) );
+			if ( Recovery_Token::is_well_formed( $token ) ) {
+				Recovery_Token::stash( $token );
+			}
+			wp_safe_redirect( $url );
 			exit;
 		}
 
@@ -116,8 +125,7 @@ final class Enrollment {
 			return 'invalid_nonce';
 		}
 		if ( 'redeem' === $action ) {
-			$token  = is_string( $input['token'] ?? null ) ? $input['token'] : '';
-			$result = Recovery_Token::redeem( $token );
+			$result = Recovery_Token::redeem_stashed();
 			return 'ok' === $result ? 'recovery_ok' : ( 'password_first' === $result ? 'password_first' : 'recovery_invalid' );
 		}
 		// During a staff recovery nothing changes before the mailed link was opened in this session.
@@ -135,11 +143,15 @@ final class Enrollment {
 					return 'revalidate';
 				}
 				// The current app keeps working until the new one is proven.
-				Account::set_pending_secret( $user->ID, Two_Factor_Totp::generate_key() );
-				return 'replace_started';
+				return null !== self::new_pending_secret( $user ) ? 'replace_started' : 'recovery_required';
 			case 'cancel':
-				Account::clear_pending_secret( $user->ID );
-				return 'cancelled';
+				return self::with_current_session(
+					$user,
+					static function () use ( $user ): string {
+						Account::clear_pending_secret( $user->ID );
+						return 'cancelled';
+					}
+				) ?? 'recovery_required';
 		}
 		return 'error';
 	}
@@ -290,10 +302,8 @@ final class Enrollment {
 					esc_html__( 'Set a new password', 'aiwos-two-factor' )
 				);
 			}
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only shown back in a POST form; redeemed after a nonce check.
-			$token = isset( $_GET[ Recovery_Token::QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ Recovery_Token::QUERY_ARG ] ) ) : '';
-			if ( Recovery_Token::is_well_formed( $token ) ) {
-				return $html . View::recovery_confirm( $token, self::nonce_action( $user, 'redeem' ), self::NONCE_FIELD, self::ACTION_FIELD );
+			if ( '' !== Recovery_Token::stashed() ) {
+				return $html . View::recovery_confirm( self::nonce_action( $user, 'redeem' ), self::NONCE_FIELD, self::ACTION_FIELD );
 			}
 			return $html . View::message( __( 'Your two-factor authentication was reset. Open the link from the e-mail we sent you to link a new authenticator app.', 'aiwos-two-factor' ) );
 		}
@@ -317,8 +327,10 @@ final class Enrollment {
 		}
 
 		if ( null === $pending ) {
-			$pending = Two_Factor_Totp::generate_key();
-			Account::set_pending_secret( $user->ID, $pending );
+			$pending = self::new_pending_secret( $user );
+			if ( null === $pending ) {
+				return $html . View::message( __( 'Something went wrong. Please try again.', 'aiwos-two-factor' ) );
+			}
 		}
 		$totp->enqueue_assets( '' );
 		$html .= View::enroll_form( $user, $pending, self::nonce_action( $user, 'enroll' ), self::NONCE_FIELD, self::ACTION_FIELD );
@@ -326,6 +338,45 @@ final class Enrollment {
 			$html .= View::button( self::nonce_action( $user, 'cancel' ), self::NONCE_FIELD, self::ACTION_FIELD, 'cancel', __( 'Cancel and keep the current app', 'aiwos-two-factor' ) );
 		}
 		return $html;
+	}
+
+	/**
+	 * Create and store a new pending secret, under the account lock and only while this
+	 * session still exists and may enroll (a staff reset may have happened meanwhile).
+	 *
+	 * @param WP_User $user Current user.
+	 * @return string|null The secret, or null when refused.
+	 */
+	private static function new_pending_secret( WP_User $user ): ?string {
+		return self::with_current_session(
+			$user,
+			static function () use ( $user ): string {
+				$key = Two_Factor_Totp::generate_key();
+				Account::set_pending_secret( $user->ID, $key );
+				return $key;
+			}
+		);
+	}
+
+	/**
+	 * Run $callback under the account lock if this request's session still exists and may
+	 * enroll, judged on fresh state.
+	 *
+	 * @param WP_User  $user     Current user.
+	 * @param callable $callback Work.
+	 * @return mixed Its result, or null when refused.
+	 */
+	private static function with_current_session( WP_User $user, callable $callback ) {
+		$token = wp_get_session_token();
+		return Account::locked(
+			$user->ID,
+			static function () use ( $user, $token, $callback ) {
+				if ( '' === $token || null === WP_Session_Tokens::get_instance( $user->ID )->get( $token ) || ! Recovery_Token::session_may_enroll() ) {
+					return null;
+				}
+				return $callback();
+			}
+		);
 	}
 
 	/**

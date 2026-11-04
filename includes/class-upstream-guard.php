@@ -52,14 +52,47 @@ final class Upstream_Guard {
 	 */
 	public static function lock_upstream_write( $response, $handler, $request ) {
 		$user_id = get_current_user_id();
-		if ( is_wp_error( $response ) || ! $user_id || 'GET' === $request->get_method() || ! str_starts_with( (string) $request->get_route(), '/' . Two_Factor_Core::REST_NAMESPACE . '/' ) ) {
+		// Decide on the matched handler, not the URL: core matches routes case-insensitively.
+		$callback = $handler['callback'] ?? null;
+		$upstream = is_array( $callback ) && ( $callback[0] ?? null ) instanceof \Two_Factor_Provider;
+		if ( is_wp_error( $response ) || ! $user_id || ! $upstream || 'GET' === $request->get_method() ) {
 			return $response;
 		}
 		if ( ! Account::lock( $user_id ) ) {
 			return new \WP_Error( 'aiwos_two_factor_busy', __( 'Please try again.', 'aiwos-two-factor' ), array( 'status' => 503 ) );
 		}
+		// The request was authenticated before the lock; a staff reset may have happened since.
+		if ( ! self::still_authorized( $user_id ) ) {
+			Account::unlock( $user_id );
+			return new \WP_Error( 'aiwos_two_factor_required', __( 'Two-factor authentication is required. Set it up or confirm your code first.', 'aiwos-two-factor' ), array( 'status' => 403 ) );
+		}
 		self::$locked_user = $user_id;
 		return $response;
+	}
+
+	/**
+	 * Inside the account lock, on fresh state: the login that authenticated this request still
+	 * exists, and the account may change its 2FA (not in a recovery this session did not
+	 * unlock, not waiting for setup or a code confirmation).
+	 *
+	 * @param int $user_id Current user.
+	 */
+	private static function still_authorized( int $user_id ): bool {
+		$token = wp_get_session_token();
+		if ( '' !== $token ) {
+			if ( null === \WP_Session_Tokens::get_instance( $user_id )->get( $token ) ) {
+				return false;
+			}
+		} else {
+			// Only an application password may come without a session, and it must still exist.
+			$uuid = rest_get_authenticated_app_password();
+			if ( ! $uuid || ! \WP_Application_Passwords::get_user_application_password( $user_id, $uuid ) ) {
+				return false;
+			}
+		}
+		return Recovery_Token::session_may_enroll()
+			&& ! Enforcer::must_enroll( wp_get_current_user() )
+			&& ! Enforcer::must_revalidate();
 	}
 
 	/**

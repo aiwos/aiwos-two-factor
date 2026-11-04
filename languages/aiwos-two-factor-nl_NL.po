@@ -235,3 +235,24 @@ msgstr "Er is niets gewijzigd: de reset kon niet worden opgeslagen. Probeer het 
 
 msgid "Please try again."
 msgstr "Probeer het opnieuw."
+
+msgid "The e-mail address of this account changed in the last 7 days. Ask a site administrator to do this reset."
+msgstr "Het e-mailadres van dit account is in de afgelopen 7 dagen gewijzigd. Vraag een sitebeheerder om deze reset te doen."
+
+msgid "The two-factor authentication of an account that recently used this e-mail address was reset. If you did not ask for this, contact us right away."
+msgstr "De tweestapsverificatie van een account dat onlangs dit e-mailadres gebruikte, is gereset. Heb je hier niet om gevraagd? Neem dan direct contact met ons op."
+
+msgid "Two-factor account lock"
+msgstr "Accountvergrendeling tweestapsverificatie"
+
+msgid "The two-factor account lock works"
+msgstr "De accountvergrendeling voor tweestapsverificatie werkt"
+
+msgid "The two-factor account lock does not work"
+msgstr "De accountvergrendeling voor tweestapsverificatie werkt niet"
+
+msgid "Security"
+msgstr "Beveiliging"
+
+msgid "Linking an authenticator app, recovery codes and staff resets use a database lock (GET_LOCK). Without it every such change is refused."
+msgstr "Het koppelen van een authenticator-app, herstelcodes en resets door beheerders gebruiken een databasevergrendeling (GET_LOCK). Zonder die vergrendeling wordt elke wijziging geweigerd."

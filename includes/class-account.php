@@ -97,6 +97,10 @@ final class Account {
 		if ( ! is_array( $pending ) || empty( $pending['key'] ) || (int) ( $pending['created'] ?? 0 ) < time() - self::PENDING_TTL ) {
 			return null;
 		}
+		// A secret shown before a staff recovery never carries over into it (or into a newer one).
+		if ( (string) ( $pending['recovery'] ?? '' ) !== (string) Recovery_Token::current_id( $user_id ) ) {
+			return null;
+		}
 		return (string) $pending['key'];
 	}
 
@@ -111,8 +115,9 @@ final class Account {
 			$user_id,
 			self::PENDING_META,
 			array(
-				'key'     => $key,
-				'created' => time(),
+				'key'      => $key,
+				'created'  => time(),
+				'recovery' => (string) Recovery_Token::current_id( $user_id ),
 			)
 		);
 	}

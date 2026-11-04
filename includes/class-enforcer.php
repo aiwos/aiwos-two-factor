@@ -107,7 +107,9 @@ final class Enforcer {
 	 */
 	private static function frontend_policy(): void {
 		if (
-			is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST )
+			// Only real admin requests (incl. admin-ajax.php) are left to guard_admin; a frontend
+			// request that merely declares itself AJAX (e.g. ?wc-ajax=) is guarded here.
+			is_admin() || wp_doing_cron() || ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST )
 			|| 'wp-login.php' === ( $GLOBALS['pagenow'] ?? '' ) || ! is_user_logged_in()
 		) {
 			return;

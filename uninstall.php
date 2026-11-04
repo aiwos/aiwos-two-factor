@@ -7,6 +7,6 @@
 
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
-foreach ( array( '_aiwos_two_factor_pending', '_aiwos_two_factor_recovery' ) as $aiwos_two_factor_meta_key ) {
+foreach ( array( '_aiwos_two_factor_pending', '_aiwos_two_factor_recovery', '_aiwos_two_factor_email_changed' ) as $aiwos_two_factor_meta_key ) {
 	delete_metadata( 'user', 0, $aiwos_two_factor_meta_key, '', true );
 }

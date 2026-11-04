@@ -35,6 +35,44 @@ final class Plugin {
 		Staff_Reset::register();
 		Upstream_Guard::register();
 		Recovery_Token::register();
+		add_filter( 'site_status_tests', array( self::class, 'add_lock_health_test' ) );
+	}
+
+	/**
+	 * Site Health: the per-account database lock (MySQL/MariaDB GET_LOCK) must work, or
+	 * every 2FA change is refused.
+	 *
+	 * @param array<string, mixed> $tests Tests.
+	 * @return array<string, mixed>
+	 */
+	public static function add_lock_health_test( array $tests ): array {
+		$tests['direct']['aiwos_two_factor_lock'] = array(
+			'label' => __( 'Two-factor account lock', 'aiwos-two-factor' ),
+			'test'  => array( self::class, 'lock_health_test' ),
+		);
+		return $tests;
+	}
+
+	/**
+	 * Run the lock test.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function lock_health_test(): array {
+		$ok = Account::lock( 0 );
+		if ( $ok ) {
+			Account::unlock( 0 );
+		}
+		return array(
+			'label'       => $ok ? __( 'The two-factor account lock works', 'aiwos-two-factor' ) : __( 'The two-factor account lock does not work', 'aiwos-two-factor' ),
+			'status'      => $ok ? 'good' : 'critical',
+			'badge'       => array(
+				'label' => __( 'Security', 'aiwos-two-factor' ),
+				'color' => $ok ? 'blue' : 'red',
+			),
+			'description' => '<p>' . esc_html__( 'Linking an authenticator app, recovery codes and staff resets use a database lock (GET_LOCK). Without it every such change is refused.', 'aiwos-two-factor' ) . '</p>',
+			'test'        => 'aiwos_two_factor_lock',
+		);
 	}
 
 	/**

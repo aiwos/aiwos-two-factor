@@ -60,20 +60,18 @@ final class View {
 	}
 
 	/**
-	 * Confirm button for a recovery link: the token is only redeemed by POST.
+	 * Confirm button for a recovery link: the token (kept in the session) is only used by POST.
 	 *
-	 * @param string $token        Token from the link.
 	 * @param string $nonce_action Nonce action.
 	 * @param string $nonce_field  Nonce field name.
 	 * @param string $action_field Action field name.
 	 */
-	public static function recovery_confirm( string $token, string $nonce_action, string $nonce_field, string $action_field ): string {
+	public static function recovery_confirm( string $nonce_action, string $nonce_field, string $action_field ): string {
 		return sprintf(
-			'<form method="post" class="aiwos-two-factor__redeem" action="%1$s"><p>%2$s</p>%3$s<input type="hidden" name="token" value="%4$s"><input type="hidden" name="%5$s" value="redeem"><p><button type="submit">%6$s</button></p></form>',
+			'<form method="post" class="aiwos-two-factor__redeem" action="%1$s"><p>%2$s</p>%3$s<input type="hidden" name="%4$s" value="redeem"><p><button type="submit">%5$s</button></p></form>',
 			esc_url( remove_query_arg( array( Enrollment::STATUS_PARAM, Recovery_Token::QUERY_ARG ) ) ),
 			esc_html__( 'Continue to link a new authenticator app.', 'aiwos-two-factor' ),
 			wp_nonce_field( $nonce_action, $nonce_field, false, false ),
-			esc_attr( $token ),
 			esc_attr( $action_field ),
 			esc_html__( 'Continue', 'aiwos-two-factor' )
 		);

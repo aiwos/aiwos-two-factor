@@ -38,17 +38,16 @@ final class Recovery_Token {
 	private const SESSION_KEY = 'aiwos-two-factor-recovery';
 
 	/**
-	 * Password reset validated in this request: array{user: int, recovery: string, old_hash: string}.
-	 *
-	 * @var array<string, mixed>|null
+	 * Session key holding a link token between opening the link and pressing "Continue", so
+	 * the token leaves the address bar before the page (and its scripts) loads.
 	 */
-	private static ?array $reset_in_progress = null;
+	private const LINK_KEY = 'aiwos-two-factor-link';
 
 	/**
-	 * Register the password-reset hooks.
+	 * Register the password hooks.
 	 */
 	public static function register(): void {
-		add_action( 'after_password_reset', array( self::class, 'password_was_reset' ), 10, 2 );
+		add_action( 'wp_set_password', array( self::class, 'password_was_set' ), 10, 3 );
 		add_action( 'validate_password_reset', array( self::class, 'refuse_same_password' ), 10, 2 );
 	}
 
@@ -96,6 +95,38 @@ final class Recovery_Token {
 	}
 
 	/**
+	 * Keep a link token in the current session (it then leaves the URL).
+	 *
+	 * @param string $token Token from the link.
+	 */
+	public static function stash( string $token ): void {
+		Two_Factor_Core::update_current_user_session( array( self::LINK_KEY => $token ) );
+	}
+
+	/**
+	 * The link token kept in the current session, if any.
+	 */
+	public static function stashed(): string {
+		$session = Two_Factor_Core::get_current_user_session();
+		$token   = is_array( $session ) ? (string) ( $session[ self::LINK_KEY ] ?? '' ) : '';
+		return self::is_well_formed( $token ) ? $token : '';
+	}
+
+	/**
+	 * Use the link token kept in the current session; it is removed either way.
+	 *
+	 * @return string ok, password_first or invalid.
+	 */
+	public static function redeem_stashed(): string {
+		$token  = self::stashed();
+		$result = '' === $token ? 'invalid' : self::redeem( $token );
+		if ( 'password_first' !== $result ) {
+			Two_Factor_Core::update_current_user_session( array( self::LINK_KEY => null ) );
+		}
+		return $result;
+	}
+
+	/**
 	 * Whether the account is waiting for staff-assisted recovery (expired or not).
 	 *
 	 * @param int $user_id User ID.
@@ -127,30 +158,27 @@ final class Recovery_Token {
 	}
 
 	/**
-	 * After a password reset: the requirement is met only for the recovery that was pending
-	 * when this reset was validated, and only when the new password really differs from the
-	 * old one. A reset validated before a newer recovery never satisfies that newer one.
+	 * Any password change that really changes the password (reset form, profile, a
+	 * site's own form) meets the requirement of a pending recovery. A hash upgrade at login
+	 * stores the same password again and does not count. Only the recovery pending at the
+	 * moment of the change is affected: a change made earlier happened before it existed.
 	 *
-	 * @param mixed $user     User (WP_User from core's after_password_reset).
-	 * @param mixed $new_pass The new password.
+	 * @param mixed $password      New password.
+	 * @param mixed $user_id       User ID.
+	 * @param mixed $old_user_data User before the change.
 	 */
-	public static function password_was_reset( $user, $new_pass = '' ): void {
-		$validated               = self::$reset_in_progress;
-		self::$reset_in_progress = null;
-		if ( ! $user instanceof WP_User || ! is_string( $new_pass ) || '' === $new_pass || ! $validated || $validated['user'] !== $user->ID ) {
-			return;
-		}
-		if ( wp_check_password( $new_pass, (string) $validated['old_hash'], $user->ID ) ) {
+	public static function password_was_set( $password, $user_id, $old_user_data = null ): void {
+		if ( ! is_string( $password ) || ! $old_user_data instanceof WP_User || wp_check_password( $password, (string) $old_user_data->user_pass, (int) $user_id ) ) {
 			return;
 		}
 		Account::locked(
-			$user->ID,
-			static function () use ( $user, $validated ): void {
-				$raw = get_user_meta( $user->ID, self::META, true );
-				if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) && hash_equals( (string) ( $raw['id'] ?? '' ), (string) $validated['recovery'] ) ) {
+			(int) $user_id,
+			static function () use ( $user_id ): void {
+				$raw = get_user_meta( (int) $user_id, self::META, true );
+				if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) ) {
 					$done       = $raw;
 					$done['pw'] = '';
-					update_user_meta( $user->ID, self::META, $done, $raw );
+					update_user_meta( (int) $user_id, self::META, $done, $raw );
 				}
 			}
 		);
@@ -165,19 +193,9 @@ final class Recovery_Token {
 	public static function refuse_same_password( $errors, $user ): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput -- core's reset form; only compared with the stored hash.
 		$new = isset( $_POST['pass1'] ) && is_string( $_POST['pass1'] ) ? wp_unslash( $_POST['pass1'] ) : '';
-		if ( '' === $new || ! $user instanceof WP_User || ! self::needs_new_password( $user->ID ) ) {
-			return;
-		}
-		if ( wp_check_password( $new, $user->user_pass, $user->ID ) ) {
+		if ( '' !== $new && $user instanceof WP_User && self::needs_new_password( $user->ID ) && wp_check_password( $new, $user->user_pass, $user->ID ) ) {
 			$errors->add( 'aiwos_two_factor_same_password', __( 'Choose a different password than before.', 'aiwos-two-factor' ) );
-			return;
 		}
-		// Remember which recovery and which old password this reset is about (this request only).
-		self::$reset_in_progress = array(
-			'user'     => $user->ID,
-			'recovery' => (string) self::current_id( $user->ID ),
-			'old_hash' => (string) $user->user_pass,
-		);
 	}
 
 	/**
@@ -210,6 +228,8 @@ final class Recovery_Token {
 
 		$used         = $state;
 		$used['hash'] = '';
+		// From here the session has the rest of a full day to link the new app.
+		$used['expires'] = time() + self::TTL;
 		// Conditional update on the old value: of two parallel requests only one succeeds.
 		if ( ! update_user_meta( $user_id, self::META, $used, $state ) ) {
 			return 'invalid';
