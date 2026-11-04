@@ -72,16 +72,24 @@ final class Staff_Reset {
 	 */
 	public static function remember_email_change( $user_id, $old_user_data ): void {
 		$user = get_userdata( (int) $user_id );
-		if ( $user && $old_user_data instanceof WP_User && strtolower( $old_user_data->user_email ) !== strtolower( $user->user_email ) ) {
-			update_user_meta(
-				$user->ID,
-				self::EMAIL_CHANGE_META,
-				array(
-					'time'     => time(),
-					'previous' => $old_user_data->user_email,
-				)
-			);
+		if ( ! $user || ! $old_user_data instanceof WP_User ) {
+			return;
 		}
+		// Core passes the old data slashed (o\'connor@...): compare the real addresses.
+		$old_email = wp_unslash( $old_user_data->user_email );
+		if ( strtolower( $old_email ) === strtolower( $user->user_email ) ) {
+			return;
+		}
+		// Within the window keep the earliest previous address: a second change must not hide it.
+		$previous = self::recent_previous_email( $user );
+		update_user_meta(
+			$user->ID,
+			self::EMAIL_CHANGE_META,
+			array(
+				'time'     => time(),
+				'previous' => '' !== $previous ? $previous : $old_email,
+			)
+		);
 	}
 
 	/**
@@ -204,39 +212,53 @@ final class Staff_Reset {
 		if ( '' === $reason ) {
 			return 'reason_required';
 		}
-		// Right after an e-mail change the link could go to whoever changed it: account
-		// managers may not reset then; a site manager may, and the previous address is told.
-		$previous_email = self::recent_previous_email( $target );
-		if ( '' !== $previous_email && ! current_user_can( 'manage_options' ) ) {
-			return 'email_recently_changed';
-		}
-
-		$actor = wp_get_current_user();
-		$token = Account::locked(
+		$actor  = wp_get_current_user();
+		$result = Account::locked(
 			$target->ID,
-			static function () use ( $target, $actor, $password_reset ) {
+			static function () use ( $target, $actor, $password_reset ): array {
 				// The staff member was checked before the lock; their own login may have been
 				// revoked since. Recheck their session and 2FA proof on fresh state.
 				wp_cache_delete( $actor->ID, 'user_meta' );
 				$session = wp_get_session_token();
 				if ( '' === $session || null === WP_Session_Tokens::get_instance( $actor->ID )->get( $session ) || ! Account::has_recent_proof( self::PROOF_MAX_AGE ) ) {
-					return 'revalidate';
+					return array( 'status' => 'revalidate' );
+				}
+				// The target as stored now (its address may have just changed).
+				clean_user_cache( $target->ID );
+				$fresh = get_userdata( $target->ID );
+				if ( ! $fresh ) {
+					return array( 'status' => 'not_allowed' );
+				}
+				// Right after an e-mail change the link could go to whoever changed it: account
+				// managers may not reset then; a site manager may, and the previous address is told.
+				$previous = self::recent_previous_email( $fresh );
+				if ( '' !== $previous && ! current_user_can( 'manage_options' ) ) {
+					return array( 'status' => 'email_recently_changed' );
 				}
 				// Recovery state first and only if it was stored: the account is never left open.
-				$token = Recovery_Token::issue( $target, $actor, $password_reset );
-				if ( null !== $token ) {
-					Account::revoke_access( $target->ID );
-					Account::clear_two_factor( $target->ID );
+				$token = Recovery_Token::issue( $fresh, $actor, $password_reset );
+				if ( null === $token ) {
+					return array( 'status' => 'error' );
 				}
-				return $token;
+				Account::revoke_access( $fresh->ID );
+				Account::clear_two_factor( $fresh->ID );
+				return array(
+					'status'   => 'ok',
+					'token'    => $token,
+					'target'   => $fresh,
+					'previous' => $previous,
+				);
 			}
 		);
-		if ( 'revalidate' === $token ) {
-			return 'revalidate';
-		}
-		if ( ! is_string( $token ) ) {
+		if ( ! is_array( $result ) ) {
 			return 'error';
 		}
+		if ( 'ok' !== $result['status'] ) {
+			return $result['status'];
+		}
+		$token          = $result['token'];
+		$target         = $result['target'];
+		$previous_email = $result['previous'];
 
 		/**
 		 * Fires after staff started 2FA recovery for an account (audit trail).

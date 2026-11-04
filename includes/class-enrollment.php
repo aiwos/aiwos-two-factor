@@ -302,7 +302,7 @@ final class Enrollment {
 					esc_html__( 'Set a new password', 'aiwos-two-factor' )
 				);
 			}
-			if ( '' !== Recovery_Token::stashed() ) {
+			if ( Recovery_Token::has_stash() ) {
 				return $html . View::recovery_confirm( self::nonce_action( $user, 'redeem' ), self::NONCE_FIELD, self::ACTION_FIELD );
 			}
 			return $html . View::message( __( 'Your two-factor authentication was reset. Open the link from the e-mail we sent you to link a new authenticator app.', 'aiwos-two-factor' ) );

@@ -228,8 +228,9 @@ try {
 	};
 	$html      = $link_page();
 	$check( 'compromised password: link page asks for a new password first', str_contains( $html, esc_url( wp_lostpassword_url() ) ) && ! str_contains( $html, 'aiwos-two-factor__redeem' ) && ! str_contains( $html, 'name="authcode"' ) );
+	Two_Factor_Core::update_current_user_session( array( 'aiwos-two-factor-link' => null ) );
 	Recovery_Token::stash( str_repeat( '0', 64 ) );
-	$check( 'wrong token refused', 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem' ) ) );
+	$check( 'wrong token is not kept and cannot be redeemed', ! Recovery_Token::has_stash() && 'recovery_invalid' === Enrollment::process( $target, 'redeem', $form( $target, 'redeem' ) ) );
 	Recovery_Token::stash( $token );
 	$check( 'redeem needs a nonce', 'invalid_nonce' === Enrollment::process( $target, 'redeem', array() ) );
 	$check(
@@ -426,6 +427,77 @@ try {
 	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
 	$before_mails = count( $GLOBALS['aiwos_tf_test']['mails'] );
 	$check( 'e-mail changed recently: site manager allowed, previous address told', 'started' === Staff_Reset::start_recovery( get_userdata( $moved->ID ), 'Email test', false ) && in_array( $old, array_column( array_slice( $GLOBALS['aiwos_tf_test']['mails'], $before_mails ), 'to' ), true ) );
+
+	// E-mail: an unchanged address with an apostrophe is no change; the earliest previous stays.
+	$quote = aiwos_tf_user( 'subscriber' );
+	wp_update_user(
+		array(
+			'ID'         => $quote->ID,
+			'user_email' => "o'neil-" . $quote->user_email,
+		)
+	);
+	delete_user_meta( $quote->ID, Staff_Reset::EMAIL_CHANGE_META );
+	wp_update_user(
+		array(
+			'ID'         => $quote->ID,
+			'first_name' => 'Unchanged',
+		)
+	);
+	$check( 'unchanged address with an apostrophe is not an e-mail change', '' === get_user_meta( $quote->ID, Staff_Reset::EMAIL_CHANGE_META, true ) );
+	$twice = aiwos_tf_user( 'subscriber' );
+	$first = $twice->user_email;
+	wp_update_user(
+		array(
+			'ID'         => $twice->ID,
+			'user_email' => 'one-' . $first,
+		)
+	);
+	wp_update_user(
+		array(
+			'ID'         => $twice->ID,
+			'user_email' => 'two-' . $first,
+		)
+	);
+	$check( 'two changes in the window keep the earliest previous address', get_user_meta( $twice->ID, Staff_Reset::EMAIL_CHANGE_META, true )['previous'] === $first );
+
+	// Link stash: valid tokens only, hashed, never written back into a revoked session.
+	$stasher = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	$before_stash = count( aiwos_tf_mails_to( $stasher ) );
+	Staff_Reset::start_recovery( $stasher, 'Stash test', true );
+	preg_match( '/' . Recovery_Token::QUERY_ARG . '=([0-9a-f]{64})/', (string) aiwos_tf_mails_to( $stasher )[ $before_stash ]['message'], $sm );
+	$stash_token = $sm[1] ?? '';
+	$s_token     = aiwos_tf_log_in( $stasher );
+	Recovery_Token::stash( $stash_token );
+	$s_session = WP_Session_Tokens::get_instance( $stasher->ID )->get( $s_token );
+	$check( 'stash keeps only a hash of the token', Recovery_Token::has_stash() && ! str_contains( (string) wp_json_encode( $s_session ), $stash_token ) );
+	Recovery_Token::stash( str_repeat( 'a', 64 ) );
+	$check( 'an invalid token does not replace a valid stash', Recovery_Token::has_stash() && 'password_first' === Recovery_Token::redeem_stashed() );
+	WP_Session_Tokens::get_instance( $stasher->ID )->destroy( $s_token );
+	Recovery_Token::stash( $stash_token );
+	Recovery_Token::redeem_stashed();
+	$check( 'stash and redeem never recreate a revoked session', null === WP_Session_Tokens::get_instance( $stasher->ID )->get( $s_token ) );
+
+	// Password requirement: a failed update and a change from a revoked login do not count.
+	$taken = aiwos_tf_user( 'subscriber' );
+	// As an administrator would edit it (not the user's own login).
+	wp_set_current_user( 0 );
+	unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
+	$fail = wp_update_user(
+		array(
+			'ID'         => $stasher->ID,
+			'user_pass'  => 'Failed-change-1!' . wp_generate_password( 8 ),
+			'user_email' => $taken->user_email,
+		)
+	);
+	$check( 'password update that fails to save leaves the requirement', is_wp_error( $fail ) && Recovery_Token::needs_new_password( $stasher->ID ) );
+	$gone_token = aiwos_tf_log_in( get_userdata( $stasher->ID ) );
+	WP_Session_Tokens::get_instance( $stasher->ID )->destroy( $gone_token );
+	wp_set_password( 'Revoked-login-2!' . wp_generate_password( 8 ), $stasher->ID );
+	$check( 'own password change from a revoked login does not count', Recovery_Token::needs_new_password( $stasher->ID ) );
+	wp_set_current_user( 0 );
+	wp_set_password( 'Reset-flow-3!' . wp_generate_password( 8 ), $stasher->ID );
+	$check( 'password set outside the user\'s login (reset flow) counts', ! Recovery_Token::needs_new_password( $stasher->ID ) );
 
 	// A setup page rendered from a session that a reset revoked creates no secret, and a
 	// secret from before a recovery is not used in it.

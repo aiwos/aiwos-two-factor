@@ -38,16 +38,25 @@ final class Recovery_Token {
 	private const SESSION_KEY = 'aiwos-two-factor-recovery';
 
 	/**
-	 * Session key holding a link token between opening the link and pressing "Continue", so
-	 * the token leaves the address bar before the page (and its scripts) loads.
+	 * Session key holding the hash of a valid link token between opening the link and
+	 * pressing "Continue", so the token leaves the address bar before the page loads.
 	 */
 	private const LINK_KEY = 'aiwos-two-factor-link';
+
+	/**
+	 * Password set in this request, per user, waiting to be confirmed as stored.
+	 *
+	 * @var array<int, string>
+	 */
+	private static array $set_passwords = array();
 
 	/**
 	 * Register the password hooks.
 	 */
 	public static function register(): void {
 		add_action( 'wp_set_password', array( self::class, 'password_was_set' ), 10, 3 );
+		// wp_update_user() announces the password before it is stored: confirm afterwards.
+		add_action( 'profile_update', array( self::class, 'confirm_password_change' ), 20 );
 		add_action( 'validate_password_reset', array( self::class, 'refuse_same_password' ), 10, 2 );
 	}
 
@@ -95,35 +104,69 @@ final class Recovery_Token {
 	}
 
 	/**
-	 * Keep a link token in the current session (it then leaves the URL).
+	 * Keep a link in the current session (it then leaves the URL): only a token that is valid
+	 * for this account right now, only its hash, and only while this session still exists.
 	 *
 	 * @param string $token Token from the link.
 	 */
 	public static function stash( string $token ): void {
-		Two_Factor_Core::update_current_user_session( array( self::LINK_KEY => $token ) );
+		$user_id = get_current_user_id();
+		Account::locked(
+			$user_id,
+			static function () use ( $user_id, $token ): void {
+				$state = self::state( $user_id );
+				if ( self::session_alive() && null !== $state && '' !== $state['hash'] && hash_equals( $state['hash'], self::hash( $token ) ) ) {
+					Two_Factor_Core::update_current_user_session( array( self::LINK_KEY => $state['hash'] ) );
+				}
+			}
+		);
 	}
 
 	/**
-	 * The link token kept in the current session, if any.
+	 * Whether the current session holds a link.
 	 */
-	public static function stashed(): string {
-		$session = Two_Factor_Core::get_current_user_session();
-		$token   = is_array( $session ) ? (string) ( $session[ self::LINK_KEY ] ?? '' ) : '';
-		return self::is_well_formed( $token ) ? $token : '';
+	public static function has_stash(): bool {
+		return '' !== self::stashed_hash();
 	}
 
 	/**
-	 * Use the link token kept in the current session; it is removed either way.
+	 * Use the link held by the current session; it is removed unless a password reset comes first.
 	 *
 	 * @return string ok, password_first or invalid.
 	 */
 	public static function redeem_stashed(): string {
-		$token  = self::stashed();
-		$result = '' === $token ? 'invalid' : self::redeem( $token );
-		if ( 'password_first' !== $result ) {
-			Two_Factor_Core::update_current_user_session( array( self::LINK_KEY => null ) );
-		}
-		return $result;
+		$user_id = get_current_user_id();
+		$result  = Account::locked(
+			$user_id,
+			static function () use ( $user_id ): string {
+				$hash   = self::stashed_hash();
+				$result = '' === $hash ? 'invalid' : self::redeem_locked( $user_id, $hash );
+				if ( 'password_first' !== $result && self::session_alive() ) {
+					Two_Factor_Core::update_current_user_session( array( self::LINK_KEY => null ) );
+				}
+				return $result;
+			}
+		);
+		return is_string( $result ) ? $result : 'invalid';
+	}
+
+	/**
+	 * Hash of the link held by the current session, or ''.
+	 */
+	private static function stashed_hash(): string {
+		$session = Two_Factor_Core::get_current_user_session();
+		$hash    = is_array( $session ) ? (string) ( $session[ self::LINK_KEY ] ?? '' ) : '';
+		return self::is_well_formed( $hash ) ? $hash : '';
+	}
+
+	/**
+	 * Whether this request's login session still exists (read fresh; a staff reset may have
+	 * revoked it). Session data is only ever written while this holds, under the account lock,
+	 * so a revoked session is never written back.
+	 */
+	private static function session_alive(): bool {
+		$token = wp_get_session_token();
+		return '' !== $token && null !== WP_Session_Tokens::get_instance( get_current_user_id() )->get( $token );
 	}
 
 	/**
@@ -171,17 +214,47 @@ final class Recovery_Token {
 		if ( ! is_string( $password ) || ! $old_user_data instanceof WP_User || wp_check_password( $password, (string) $old_user_data->user_pass, (int) $user_id ) ) {
 			return;
 		}
-		Account::locked(
-			(int) $user_id,
-			static function () use ( $user_id ): void {
-				$raw = get_user_meta( (int) $user_id, self::META, true );
-				if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) ) {
-					$done       = $raw;
-					$done['pw'] = '';
-					update_user_meta( (int) $user_id, self::META, $done, $raw );
-				}
+		self::$set_passwords[ (int) $user_id ] = $password;
+		// Direct wp_set_password() has stored it already; wp_update_user() confirms on profile_update.
+		self::confirm_password_change( (int) $user_id );
+	}
+
+	/**
+	 * Clear the requirement once the new password is really stored (read fresh from the
+	 * database). A change requested by the user from a login that was revoked meanwhile (by a
+	 * staff reset) does not count.
+	 *
+	 * @param mixed $user_id User ID.
+	 */
+	public static function confirm_password_change( $user_id ): void {
+		$user_id = (int) $user_id;
+		if ( ! isset( self::$set_passwords[ $user_id ] ) ) {
+			return;
+		}
+		$password = self::$set_passwords[ $user_id ];
+		$work     = static function () use ( $user_id, $password ): string {
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- must read the stored hash, not a cached copy.
+			$stored = (string) $wpdb->get_var( $wpdb->prepare( "SELECT user_pass FROM {$wpdb->users} WHERE ID = %d", $user_id ) );
+			if ( ! wp_check_password( $password, $stored, $user_id ) ) {
+				return 'not_stored';
 			}
-		);
+			if ( get_current_user_id() === $user_id && ! self::session_alive() ) {
+				return 'done';
+			}
+			$raw = get_user_meta( $user_id, self::META, true );
+			if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) ) {
+				$met       = $raw;
+				$met['pw'] = '';
+				update_user_meta( $user_id, self::META, $met, $raw );
+			}
+			return 'done';
+		};
+		// One retry when the account is busy; failing that, the requirement stays (fail closed).
+		$result = Account::locked( $user_id, $work ) ?? Account::locked( $user_id, $work );
+		if ( 'done' === $result ) {
+			unset( self::$set_passwords[ $user_id ] );
+		}
 	}
 
 	/**
@@ -207,18 +280,18 @@ final class Recovery_Token {
 	 */
 	public static function redeem( string $token ): string {
 		$user_id = get_current_user_id();
-		return (string) ( Account::locked( $user_id, static fn() => self::redeem_locked( $user_id, $token ) ) ?? 'invalid' );
+		return (string) ( Account::locked( $user_id, static fn() => self::redeem_locked( $user_id, self::hash( $token ) ) ) ?? 'invalid' );
 	}
 
 	/**
-	 * Redeem under the account lock.
+	 * Redeem under the account lock, for this request's session only while it still exists.
 	 *
 	 * @param int    $user_id User ID.
-	 * @param string $token   Token from the link.
+	 * @param string $hash    Keyed hash of the token from the link.
 	 */
-	private static function redeem_locked( int $user_id, string $token ): string {
+	private static function redeem_locked( int $user_id, string $hash ): string {
 		$state = self::state( $user_id );
-		if ( null === $state || '' === $state['hash'] || self::is_expired( $user_id ) || ! hash_equals( $state['hash'], self::hash( $token ) ) ) {
+		if ( ! self::session_alive() || null === $state || '' === $state['hash'] || self::is_expired( $user_id ) || ! hash_equals( $state['hash'], $hash ) ) {
 			return 'invalid';
 		}
 		// Not used up: the user sets a new password first (which ends this session) and opens it then.
