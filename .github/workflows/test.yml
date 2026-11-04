@@ -53,8 +53,16 @@ jobs:
           DIR: wp-content/plugins/aiwos-two-factor
         run: tests/run.sh
 
-      - name: HTTP checks of the enforcement boundary
+      - name: HTTP checks of the enforcement boundary (plain permalinks)
         env:
           BASE_URL: http://localhost:8888
           WP: npx --yes @wordpress/env run cli wp
         run: tests/http.sh
+
+      - name: HTTP checks of the enforcement boundary (pretty permalinks)
+        env:
+          BASE_URL: http://localhost:8888
+          WP: npx --yes @wordpress/env run cli wp
+        run: |
+          npx --yes @wordpress/env run cli wp rewrite structure '/%postname%/' --hard
+          tests/http.sh

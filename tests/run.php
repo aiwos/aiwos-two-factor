@@ -337,7 +337,7 @@ try {
 	$own_request->set_body_params( array( 'user_id' => $admin->ID ) );
 	$own_response = rest_do_request( $own_request );
 	global $wpdb;
-	$check( 'upstream REST write on own account still works, lock released after', ! $own_response->is_error() && ! empty( $own_response->get_data()['codes'] ) && '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', 'aiwos_two_factor_' . $admin->ID ) ) );
+	$check( 'upstream REST write on own account still works, lock released after', ! $own_response->is_error() && ! empty( $own_response->get_data()['codes'] ) && '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', Account::lock_name( $admin->ID ) ) ) );
 	// Authenticated before a staff reset, dispatched after it: upstream writes must be refused.
 	$racer = aiwos_tf_user( 'subscriber' );
 	aiwos_tf_link_app( $racer );
@@ -377,7 +377,7 @@ try {
 	aiwos_tf_log_in( $racer );
 	$fresh_session = $upstream_totp( $racer );
 	$check( 'upstream write during a recovery whose link was not used is refused', $fresh_session->is_error() && 403 === $fresh_session->get_status() && '' === get_user_meta( $racer->ID, '_two_factor_totp_key', true ) );
-	$check( 'account lock released after a refused upstream write', '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', 'aiwos_two_factor_' . $racer->ID ) ) );
+	$check( 'account lock released after a refused upstream write', '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', Account::lock_name( $racer->ID ) ) ) );
 
 	// A staff member whose own login was revoked meanwhile cannot finish a reset.
 	$victim      = aiwos_tf_user( 'subscriber' );
@@ -520,7 +520,7 @@ try {
 	$swap_token = aiwos_tf_log_in( $swap, 'Two_Factor_Totp' );
 	// Revoke right before the account lock is taken: after all checks outside the lock.
 	$revoke_mid = static function ( $query ) use ( $swap, $swap_token ) {
-		if ( str_contains( $query, 'GET_LOCK' ) && str_contains( $query, 'aiwos_two_factor_' . $swap->ID ) ) {
+		if ( str_contains( $query, 'GET_LOCK' ) && str_contains( $query, Account::lock_name( $swap->ID ) ) ) {
 			WP_Session_Tokens::get_instance( $swap->ID )->destroy( $swap_token );
 		}
 		return $query;
@@ -529,6 +529,57 @@ try {
 	$swap_status = Enrollment::process( $swap, 'replace', $form( $swap, 'replace' ) );
 	remove_filter( 'query', $revoke_mid );
 	$check( 'session revoked before the new secret is stored: refused', 'recovery_required' === $swap_status && null === Account::pending_secret( $swap->ID ) && get_user_meta( $swap->ID, '_two_factor_totp_key', true ) === $swap_key );
+
+	// E-mail: a first address on an account without one blocks managers too; the original
+	// (empty) address is kept through later changes.
+	$no_mail_id                          = (int) wp_insert_user(
+		array(
+			'user_login' => 'aftf_test_nomail_' . wp_generate_password( 6, false ),
+			'user_pass'  => wp_generate_password( 24 ),
+			'role'       => 'subscriber',
+		)
+	);
+	$GLOBALS['aiwos_tf_test']['users'][] = $no_mail_id;
+	$no_mail                             = get_userdata( $no_mail_id );
+	aiwos_tf_link_app( $no_mail );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	$check( 'account without e-mail: reset refused before anything changes', 'no_email' === Staff_Reset::start_recovery( $no_mail, 'No mail test', false ) && Account::has_authenticator( $no_mail_id ) && ! Recovery_Token::is_pending( $no_mail_id ) );
+	wp_update_user(
+		array(
+			'ID'         => $no_mail_id,
+			'user_email' => 'first-' . wp_generate_password( 6, false ) . '@example.invalid',
+		)
+	);
+	wp_update_user(
+		array(
+			'ID'         => $no_mail_id,
+			'user_email' => 'second-' . wp_generate_password( 6, false ) . '@example.invalid',
+		)
+	);
+	$check( 'first address counts as a change; the original (empty) address is kept', '' === get_user_meta( $no_mail_id, Staff_Reset::EMAIL_CHANGE_META, true )['previous'] );
+	aiwos_tf_log_in( $manager, 'Two_Factor_Totp' );
+	$check( 'manager cannot reset right after a first address was added', 'email_recently_changed' === Staff_Reset::start_recovery( get_userdata( $no_mail_id ), 'Takeover attempt', false ) && Account::has_authenticator( $no_mail_id ) );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+
+	// Frontend account field: never a user id.
+	$numeric_login                       = (string) wp_rand( 900000000, 999999999 );
+	$numeric_id                          = (int) wp_insert_user(
+		array(
+			'user_login' => $numeric_login,
+			'user_pass'  => wp_generate_password( 24 ),
+			'user_email' => 'aftf_num_' . $numeric_login . '@example.invalid',
+			'role'       => 'subscriber',
+		)
+	);
+	$GLOBALS['aiwos_tf_test']['users'][] = $numeric_id;
+	$by_id                               = Staff_Reset::resolve_account( (string) $admin->ID );
+	$check( 'frontend field: numeric input is a username, not a user id', $numeric_id === Staff_Reset::resolve_account( $numeric_login )->ID && ( false === $by_id || $admin->ID !== $by_id->ID ) );
+	$check( 'frontend field: e-mail address resolves', $numeric_id === Staff_Reset::resolve_account( 'aftf_num_' . $numeric_login . '@example.invalid' )->ID );
+
+	// Enforcement status and lock name.
+	$check( 'Site Health: enforcement test reports enforced', 'good' === Plugin::enforcement_health_test()['status'] );
+	$check( 'Site Health tests registered', has_filter( 'site_status_tests', array( Plugin::class, 'add_health_tests' ) ) !== false );
+	$check( 'lock name is a site-specific hash, not the bare user id', 1 === preg_match( '/^aiwos2fa_[0-9a-f]{40}$/', Account::lock_name( 7 ) ) && Account::lock_name( 7 ) !== Account::lock_name( 8 ) );
 
 	$check( 'Site Health: account lock works', 'good' === Plugin::lock_health_test()['status'] );
 

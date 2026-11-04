@@ -41,6 +41,7 @@ fake=$(curl_ -b "$JAR" -o /dev/null -w '%{http_code} %{redirect_url}' "$BASE_URL
 check 'GET ?rest_route=0 (not REST) is guarded' "$(printf '%s' "$fake" | grep -cE '^30[23] .*(2fa|aiwos-two-factor-setup)')" 1
 check 'POST ?rest_route=0 (not REST) is refused' "$(curl_ -b "$JAR" -o /dev/null -w '%{http_code}' -d 'gform_submit=1' "$BASE_URL/?rest_route=0")" 403
 check 'POST to a page is refused' "$(curl_ -b "$JAR" -o /dev/null -w '%{http_code}' -d 'probe=1' "$BASE_URL/")" 403
+check 'POST to a REST-looking path is refused' "$(curl_ -b "$JAR" -o /dev/null -w '%{http_code}' -d 'gform_submit=1' "$BASE_URL/wp-json/x")" 403
 check 'admin-ajax is refused' "$(curl_ -b "$JAR" -o /dev/null -w '%{http_code}' -d 'action=heartbeat' "$BASE_URL$AJAX_PATH")" 403
 admin=$(curl_ -b "$JAR" -o /dev/null -w '%{http_code} %{redirect_url}' "$BASE_URL$ADMIN_PATH")
 check 'wp-admin redirects to the setup page' "$(printf '%s' "$admin" | grep -cE '^30[23] .*(2fa|aiwos-two-factor-setup)')" 1

@@ -197,7 +197,7 @@ final class Account {
 	public static function lock( int $user_id ): bool {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- a named lock has no WordPress API and must not be cached.
-		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 10 )', 'aiwos_two_factor_' . $user_id ) ) ) {
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 10 )', self::lock_name( $user_id ) ) ) ) {
 			// Fails closed (nothing changes), but say why: a busy account or a database without GET_LOCK.
 			error_log( sprintf( '[aiwos-two-factor] could not lock account %d (GET_LOCK failed or timed out); change refused', $user_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operational diagnostic.
 			return false;
@@ -213,7 +213,19 @@ final class Account {
 	 */
 	public static function unlock( int $user_id ): void {
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', 'aiwos_two_factor_' . $user_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- see lock().
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::lock_name( $user_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- see lock().
+	}
+
+	/**
+	 * Lock name for an account. MySQL lock names are server-wide: on shared hosting another
+	 * site (or this site's staging on the same server) must not be able to hold this one's
+	 * locks, so the name is a keyed hash of database, table prefix and user (max 64 chars).
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function lock_name( int $user_id ): string {
+		global $wpdb;
+		return 'aiwos2fa_' . substr( hash_hmac( 'sha256', $wpdb->dbname . '|' . $wpdb->prefix . '|' . $user_id, wp_salt( 'auth' ) ), 0, 40 );
 	}
 
 	/**

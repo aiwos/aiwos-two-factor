@@ -80,29 +80,35 @@ final class Staff_Reset {
 		if ( strtolower( $old_email ) === strtolower( $user->user_email ) ) {
 			return;
 		}
-		// Within the window keep the earliest previous address: a second change must not hide it.
-		$previous = self::recent_previous_email( $user );
+		// Within the window keep the original address (also when it was empty): a second
+		// change must not hide it. A first address on an account without one counts as a change.
+		$earlier = self::recent_email_change( $user );
 		update_user_meta(
 			$user->ID,
 			self::EMAIL_CHANGE_META,
 			array(
 				'time'     => time(),
-				'previous' => '' !== $previous ? $previous : $old_email,
+				'previous' => null !== $earlier ? $earlier['previous'] : $old_email,
 			)
 		);
 	}
 
 	/**
-	 * Previous address when the e-mail address changed recently, else ''.
+	 * The e-mail change inside the window, if any: array{time: int, previous: string}, where
+	 * previous is the address before the first change in the window ('' if there was none).
 	 *
 	 * @param WP_User $user Account.
+	 * @return array{time: int, previous: string}|null
 	 */
-	private static function recent_previous_email( WP_User $user ): string {
+	private static function recent_email_change( WP_User $user ): ?array {
 		$change = get_user_meta( $user->ID, self::EMAIL_CHANGE_META, true );
 		if ( ! is_array( $change ) || (int) ( $change['time'] ?? 0 ) < time() - self::EMAIL_CHANGE_WINDOW ) {
-			return '';
+			return null;
 		}
-		return (string) ( $change['previous'] ?? '' );
+		return array(
+			'time'     => (int) $change['time'],
+			'previous' => (string) ( $change['previous'] ?? '' ),
+		);
 	}
 
 	/**
@@ -201,7 +207,7 @@ final class Staff_Reset {
 	 * @param bool    $password_reset The password may be compromised: send the password reset
 	 *                                mail, and the link only works after a new password was set.
 	 * @return string started, error, mail_failed, password_mail_failed, reason_required,
-	 *                email_recently_changed, or a check() code.
+	 *                email_recently_changed, no_email, or a check() code.
 	 */
 	public static function start_recovery( WP_User $target, string $reason, bool $password_reset ): string {
 		$denied = self::check( $target );
@@ -229,12 +235,19 @@ final class Staff_Reset {
 				if ( ! $fresh ) {
 					return array( 'status' => 'not_allowed' );
 				}
-				// Right after an e-mail change the link could go to whoever changed it: account
-				// managers may not reset then; a site manager may, and the previous address is told.
-				$previous = self::recent_previous_email( $fresh );
-				if ( '' !== $previous && ! current_user_can( 'manage_options' ) ) {
+				// The link is mailed to the account's address: without one the reset would only
+				// lock the user out. Refuse before anything changes.
+				if ( ! is_email( $fresh->user_email ) ) {
+					return array( 'status' => 'no_email' );
+				}
+				// Right after an e-mail change (including a first address) the link could go to
+				// whoever changed it: account managers may not reset then; a site manager may,
+				// and the previous address (if any) is told.
+				$change = self::recent_email_change( $fresh );
+				if ( null !== $change && ! current_user_can( 'manage_options' ) ) {
 					return array( 'status' => 'email_recently_changed' );
 				}
+				$previous = null !== $change ? $change['previous'] : '';
 				// Recovery state first and only if it was stored: the account is never left open.
 				$token = Recovery_Token::issue( $fresh, $actor, $password_reset );
 				if ( null === $token ) {
@@ -438,11 +451,11 @@ final class Staff_Reset {
 		if ( ! wp_verify_nonce( $nonce, self::ACTION ) ) {
 			return 'invalid_nonce';
 		}
-		$account = isset( $_POST['account'] ) ? sanitize_text_field( wp_unslash( $_POST['account'] ) ) : '';
-		$target  = ctype_digit( $account ) ? get_userdata( (int) $account ) : get_user_by( 'email', $account );
-		if ( ! $target && ! ctype_digit( $account ) ) {
-			$target = get_user_by( 'login', $account );
-		}
+		// The wp-admin screen posts the user id it showed; the frontend form takes what staff type.
+		$from_admin = 'admin-post.php' === ( $GLOBALS['pagenow'] ?? '' );
+		$target     = $from_admin
+			? get_userdata( isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0 )
+			: self::resolve_account( isset( $_POST['account'] ) ? sanitize_text_field( wp_unslash( $_POST['account'] ) ) : '' );
 		if ( ! $target ) {
 			return 'not_allowed';
 		}
@@ -451,6 +464,22 @@ final class Staff_Reset {
 			return self::send_password_reset( $target, $reason );
 		}
 		return self::start_recovery( $target, $reason, ! empty( $_POST['password_reset'] ) );
+	}
+
+	/**
+	 * Account typed in the frontend form: an e-mail address or a username, never a user id
+	 * (a numeric username such as a member number must not point at another account).
+	 *
+	 * @param string $account Typed value.
+	 * @return WP_User|false
+	 */
+	public static function resolve_account( string $account ) {
+		$account = trim( $account );
+		if ( '' === $account ) {
+			return false;
+		}
+		$user = is_email( $account ) ? get_user_by( 'email', $account ) : false;
+		return $user ? $user : get_user_by( 'login', $account );
 	}
 
 	/**
@@ -470,7 +499,7 @@ final class Staff_Reset {
 					echo esc_html( sprintf( __( 'Account: %s', 'aiwos-two-factor' ), $target->display_name . ' (' . $target->user_login . ')' ) );
 					?>
 				</p>
-				<input type="hidden" name="account" value="<?php echo esc_attr( (string) $target->ID ); ?>">
+				<input type="hidden" name="user_id" value="<?php echo esc_attr( (string) $target->ID ); ?>">
 				<input type="hidden" name="action" value="<?php echo esc_attr( self::ACTION ); ?>">
 			<?php else : ?>
 				<p><label for="aiwos-two-factor-staff-account"><?php esc_html_e( 'E-mail address or username', 'aiwos-two-factor' ); ?></label><br>
@@ -518,6 +547,7 @@ final class Staff_Reset {
 			'invalid_nonce'          => __( 'Your session expired. Please try again.', 'aiwos-two-factor' ),
 			'error'                  => __( 'Nothing was changed: the reset could not be saved. Please try again.', 'aiwos-two-factor' ),
 			'email_recently_changed' => __( 'The e-mail address of this account changed in the last 7 days. Ask a site administrator to do this reset.', 'aiwos-two-factor' ),
+			'no_email'               => __( 'This account has no valid e-mail address, so the recovery link cannot be sent. Nothing was changed. Add the address first (account managers then wait 7 days, or ask a site administrator).', 'aiwos-two-factor' ),
 		);
 		if ( ! isset( $messages[ $status ] ) ) {
 			return '';

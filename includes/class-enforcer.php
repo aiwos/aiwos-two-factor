@@ -87,6 +87,20 @@ final class Enforcer {
 	public static function guard_frontend(): void {
 		if ( ! self::is_rest_request() ) {
 			self::frontend_policy();
+			return;
+		}
+		// A REST-looking path skips the page policy, but plugins may still handle a POST on
+		// wp_loaded before REST runs: refuse those for gated users (REST would refuse anyway).
+		if ( is_user_logged_in() && ! in_array( $_SERVER['REQUEST_METHOD'] ?? 'GET', array( 'GET', 'HEAD' ), true ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared against a whitelist.
+			&& ( self::must_enroll( wp_get_current_user() ) || self::must_revalidate() ) ) {
+			wp_send_json(
+				array(
+					'code'    => 'aiwos_two_factor_required',
+					'message' => self::message(),
+					'data'    => array( 'status' => 403 ),
+				),
+				403
+			);
 		}
 	}
 
