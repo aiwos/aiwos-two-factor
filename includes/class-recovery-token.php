@@ -210,7 +210,7 @@ final class Recovery_Token {
 	 * @param mixed $user_id       User ID.
 	 * @param mixed $old_user_data User before the change.
 	 */
-	public static function password_was_set( $password, $user_id, $old_user_data = null ): void {
+	public static function password_was_set( #[\SensitiveParameter] $password, $user_id, $old_user_data = null ): void {
 		if ( ! is_string( $password ) || ! $old_user_data instanceof WP_User || wp_check_password( $password, (string) $old_user_data->user_pass, (int) $user_id ) ) {
 			return;
 		}
@@ -252,7 +252,8 @@ final class Recovery_Token {
 		};
 		// One retry when the account is busy; failing that, the requirement stays (fail closed).
 		$result = Account::locked( $user_id, $work ) ?? Account::locked( $user_id, $work );
-		if ( 'done' === $result ) {
+		// Keep the plain password only while it still has to be confirmed as stored.
+		if ( 'not_stored' !== $result ) {
 			unset( self::$set_passwords[ $user_id ] );
 		}
 	}
