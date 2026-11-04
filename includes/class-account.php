@@ -219,13 +219,14 @@ final class Account {
 	/**
 	 * Lock name for an account. MySQL lock names are server-wide: on shared hosting another
 	 * site (or this site's staging on the same server) must not be able to hold this one's
-	 * locks, so the name is a keyed hash of database, table prefix and user (max 64 chars).
+	 * locks, so the name is a keyed hash of database, base table prefix and user (max 64
+	 * chars). The base prefix is the same on every subsite: users are network-wide.
 	 *
 	 * @param int $user_id User ID.
 	 */
 	public static function lock_name( int $user_id ): string {
 		global $wpdb;
-		return 'aiwos2fa_' . substr( hash_hmac( 'sha256', $wpdb->dbname . '|' . $wpdb->prefix . '|' . $user_id, wp_salt( 'auth' ) ), 0, 40 );
+		return 'aiwos2fa_' . substr( hash_hmac( 'sha256', $wpdb->dbname . '|' . $wpdb->base_prefix . '|' . $user_id, wp_salt( 'auth' ) ), 0, 40 );
 	}
 
 	/**

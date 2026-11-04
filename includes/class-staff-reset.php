@@ -35,6 +35,13 @@ final class Staff_Reset {
 	private const PRIVILEGED  = array( 'manage_options', 'promote_users', 'edit_users', self::CAP );
 
 	/**
+	 * Whether this request came in through the wp-admin confirmation screen (admin-post).
+	 *
+	 * @var bool
+	 */
+	private static bool $admin_post = false;
+
+	/**
 	 * Last e-mail change of an account: array{time: int, previous: string}.
 	 */
 	public const EMAIL_CHANGE_META = '_aiwos_two_factor_email_changed';
@@ -394,7 +401,8 @@ final class Staff_Reset {
 	 * POST from the wp-admin confirmation screen.
 	 */
 	public static function handle_admin_post(): void {
-		$status = self::process_post();
+		self::$admin_post = true;
+		$status           = self::process_post();
 		wp_safe_redirect( add_query_arg( self::STATUS_ARG, $status, admin_url( 'users.php' ) ) );
 		exit;
 	}
@@ -452,7 +460,7 @@ final class Staff_Reset {
 			return 'invalid_nonce';
 		}
 		// The wp-admin screen posts the user id it showed; the frontend form takes what staff type.
-		$from_admin = 'admin-post.php' === ( $GLOBALS['pagenow'] ?? '' );
+		$from_admin = self::$admin_post;
 		$target     = $from_admin
 			? get_userdata( isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0 )
 			: self::resolve_account( isset( $_POST['account'] ) ? sanitize_text_field( wp_unslash( $_POST['account'] ) ) : '' );

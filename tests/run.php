@@ -576,6 +576,28 @@ try {
 	$check( 'frontend field: numeric input is a username, not a user id', $numeric_id === Staff_Reset::resolve_account( $numeric_login )->ID && ( false === $by_id || $admin->ID !== $by_id->ID ) );
 	$check( 'frontend field: e-mail address resolves', $numeric_id === Staff_Reset::resolve_account( 'aftf_num_' . $numeric_login . '@example.invalid' )->ID );
 
+	// Staff form paths: wp-admin posts the user id it showed; the frontend never takes ids.
+	$path_target = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_link_app( $path_target );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	$admin_flag   = new ReflectionProperty( Staff_Reset::class, 'admin_post' );
+	$process_post = new ReflectionMethod( Staff_Reset::class, 'process_post' );
+	$_POST        = array(
+		'_aiwos_two_factor_staff_nonce' => wp_create_nonce( 'aiwos_two_factor_reset' ),
+		'user_id'                       => (string) $path_target->ID,
+		'account'                       => (string) $admin->ID,
+		'reason'                        => 'Form path test',
+		'mode'                          => 'recovery',
+	);
+	$admin_flag->setValue( null, true );
+	$check( 'wp-admin form resets the user id it showed, not the account field', 'started' === $process_post->invoke( null ) && Recovery_Token::is_pending( $path_target->ID ) && ! Recovery_Token::is_pending( $admin->ID ) );
+	$admin_flag->setValue( null, false );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	$_POST['account']                       = (string) $path_target->ID;
+	$_POST['_aiwos_two_factor_staff_nonce'] = wp_create_nonce( 'aiwos_two_factor_reset' );
+	$check( 'frontend form ignores user_id and numeric ids', 'not_allowed' === $process_post->invoke( null ) );
+	$_POST = array();
+
 	// Enforcement status and lock name.
 	$check( 'Site Health: enforcement test reports enforced', 'good' === Plugin::enforcement_health_test()['status'] );
 	$check( 'Site Health tests registered', has_filter( 'site_status_tests', array( Plugin::class, 'add_health_tests' ) ) !== false );

@@ -69,12 +69,13 @@ Staff-assisted recovery is for a user who has neither the app nor a recovery cod
 - **Site Health** shows whether 2FA is enforced at all (critical when upstream Two Factor is missing or too old; also logged at most once an hour) and whether the per-account database lock works; without the lock every 2FA change is refused (fail closed). Lock names are a keyed hash per site, so other sites on a shared database server cannot hold them.
 - **Uninstall** keeps an open staff recovery, so after a reinstall the password alone is still not enough.
 - **Known, accepted:**
-  - **Deactivation:** while this plugin is deactivated (or upstream Two Factor is missing or too old) nobody is forced to set up 2FA, and accounts in an open staff recovery have no second factor, so the password alone logs them in. Site Health shows this as critical.
+  - **Deactivation:** while this plugin is deactivated (or upstream Two Factor is missing or too old) nobody is forced to set up 2FA, and accounts in an open staff recovery have no second factor, so the password alone logs them in. Site Health shows this as critical only when upstream is missing or too old; deactivating this plugin itself is silent.
   - **Account that never had an e-mail address:** a manager can add one, wait 7 days and reset; nobody else is told. This is a staff-trust boundary.
   - **Application passwords** created before 2FA stay valid after enrollment or replacement (upstream lets them skip 2FA). Review them at migration (see runbook).
   - **No forced re-enrollment** after the fork (decision 21 Oct 2026); healthy app links are kept.
   - **`two_factor_is_required_for_user`:** a site that uses this upstream filter to exempt linked users can trap them on `/2fa/`; don't combine it with this plugin.
   - **Multisite:** a reset clears 2FA network-wide while privilege is checked on the current site only.
+  - **REST without a nonce:** a logged-in user who still has to set up 2FA gets a 403 on a POST to a REST path even without a REST nonce (core would otherwise treat the request as anonymous).
   - **Access logs** contain the recovery link of a logged-out first click (the token is removed from the URL at once after login).
 - **Known, accepted (theoretical):** an e-mail change and a staff reset landing in the same few milliseconds can still send the link to the new address (the change is recorded just after the address is written); a broken `check_password` filter that always says "yes" would also mark an unsaved password as changed; when the account lock is busy a password reset can wait up to 20 s and then leaves the requirement in place.
 - **Known, accepted:** a user's own 2FA changes on their wp-admin profile screen (upstream's form, only for users with wp-admin access) do not take the account lock; an open recovery keeps such an account gated anyway.
