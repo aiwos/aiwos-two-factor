@@ -242,6 +242,13 @@ final class Staff_Reset {
 				if ( ! $fresh ) {
 					return array( 'status' => 'not_allowed' );
 				}
+				// Rights may have changed while this request waited for the lock: decide again
+				// on the actor's stored capabilities and the target as it is now.
+				$actor->for_site();
+				$denied = self::check( $fresh );
+				if ( '' !== $denied ) {
+					return array( 'status' => $denied );
+				}
 				// The link is mailed to the account's address: without one the reset would only
 				// lock the user out. Refuse before anything changes.
 				if ( ! is_email( $fresh->user_email ) ) {

@@ -44,9 +44,10 @@ final class Recovery_Token {
 	private const LINK_KEY = 'aiwos-two-factor-link';
 
 	/**
-	 * Password set in this request, per user, waiting to be confirmed as stored.
+	 * Password set in this request, per user, waiting to be confirmed as stored, with the
+	 * recovery that was pending when it was set.
 	 *
-	 * @var array<int, string>
+	 * @var array<int, array{password: string, recovery: ?string}>
 	 */
 	private static array $set_passwords = array();
 
@@ -214,7 +215,10 @@ final class Recovery_Token {
 		if ( ! is_string( $password ) || ! $old_user_data instanceof WP_User || wp_check_password( $password, (string) $old_user_data->user_pass, (int) $user_id ) ) {
 			return;
 		}
-		self::$set_passwords[ (int) $user_id ] = $password;
+		self::$set_passwords[ (int) $user_id ] = array(
+			'password' => $password,
+			'recovery' => self::current_id( (int) $user_id ),
+		);
 		// Direct wp_set_password() has stored it already; wp_update_user() confirms on profile_update.
 		self::confirm_password_change( (int) $user_id );
 	}
@@ -231,8 +235,9 @@ final class Recovery_Token {
 		if ( ! isset( self::$set_passwords[ $user_id ] ) ) {
 			return;
 		}
-		$password = self::$set_passwords[ $user_id ];
-		$work     = static function () use ( $user_id, $password ): string {
+		$password = self::$set_passwords[ $user_id ]['password'];
+		$recovery = self::$set_passwords[ $user_id ]['recovery'];
+		$work     = static function () use ( $user_id, $password, $recovery ): string {
 			global $wpdb;
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- must read the stored hash, not a cached copy.
 			$stored = (string) $wpdb->get_var( $wpdb->prepare( "SELECT user_pass FROM {$wpdb->users} WHERE ID = %d", $user_id ) );
@@ -243,7 +248,9 @@ final class Recovery_Token {
 				return 'done';
 			}
 			$raw = get_user_meta( $user_id, self::META, true );
-			if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) ) {
+			// Only the recovery pending when the password was set: a newer one (started by
+			// staff in between) still needs its own new password.
+			if ( is_array( $raw ) && '1' === ( $raw['pw'] ?? '' ) && null !== $recovery && $recovery === ( $raw['id'] ?? null ) ) {
 				$met       = $raw;
 				$met['pw'] = '';
 				update_user_meta( $user_id, self::META, $met, $raw );

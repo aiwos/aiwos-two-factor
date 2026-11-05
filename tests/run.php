@@ -499,6 +499,48 @@ try {
 	wp_set_password( 'Reset-flow-3!' . wp_generate_password( 8 ), $stasher->ID );
 	$check( 'password set outside the user\'s login (reset flow) counts', ! Recovery_Token::needs_new_password( $stasher->ID ) );
 
+	// Password set during one recovery, confirmed after staff started a newer one: the newer
+	// recovery still needs its own new password.
+	$gen = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+	Staff_Reset::start_recovery( $gen, 'Generation test', true );
+	wp_set_current_user( 0 );
+	unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
+	$newer = static function ( $user_id ) use ( $gen, $admin ): void {
+		if ( $gen->ID === (int) $user_id ) {
+			Recovery_Token::issue( get_userdata( $gen->ID ), $admin, true );
+		}
+	};
+	add_action( 'profile_update', $newer, 10 );
+	wp_update_user(
+		array(
+			'ID'        => $gen->ID,
+			'user_pass' => 'Generation-4!' . wp_generate_password( 8 ),
+		)
+	);
+	remove_action( 'profile_update', $newer, 10 );
+	$check( 'password set for an older recovery does not meet a newer one', Recovery_Token::needs_new_password( $gen->ID ) );
+	wp_set_password( 'Generation-5!' . wp_generate_password( 8 ), $gen->ID );
+	$check( 'a password set during the newer recovery meets it (control)', ! Recovery_Token::needs_new_password( $gen->ID ) );
+
+	// Staff rights withdrawn while the reset waits for the account lock: refused, nothing changes.
+	$demoted = aiwos_tf_user( 'subscriber', array( 'edit_users', 'list_users', Staff_Reset::CAP ) );
+	aiwos_tf_link_app( $demoted );
+	$kept = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_link_app( $kept );
+	aiwos_tf_log_in( $demoted, 'Two_Factor_Totp' );
+	$withdraw = static function ( $query ) use ( $demoted, $kept ) {
+		if ( str_contains( $query, 'GET_LOCK' ) && str_contains( $query, Account::lock_name( $kept->ID ) ) ) {
+			( new WP_User( $demoted->ID ) )->remove_cap( Staff_Reset::CAP );
+		}
+		return $query;
+	};
+	add_filter( 'query', $withdraw );
+	$withdrawn = Staff_Reset::start_recovery( get_userdata( $kept->ID ), 'Withdrawn rights test', false );
+	remove_filter( 'query', $withdraw );
+	$check( 'staff rights withdrawn while waiting for the lock: refused, nothing changed', 'not_allowed' === $withdrawn && Account::has_authenticator( $kept->ID ) && ! Recovery_Token::is_pending( $kept->ID ) );
+	aiwos_tf_log_in( $admin, 'Two_Factor_Totp' );
+
 	// A setup page rendered from a session that a reset revoked creates no secret, and a
 	// secret from before a recovery is not used in it.
 	$slow       = aiwos_tf_user( 'subscriber' );
