@@ -177,6 +177,7 @@ try {
 		wp_set_current_user( $to->ID );
 		return $token;
 	};
+
 	$switch_admin  = aiwos_tf_user( 'administrator' );
 	$switch_target = aiwos_tf_user( 'subscriber' );
 	aiwos_tf_link_app( $switch_admin );
