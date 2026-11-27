@@ -21,4 +21,12 @@
         <exclude name="Squiz.Operators.ValidLogicalOperators.NotAllowed"/>
         <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
     </rule>
+    <!-- Capability added by the User Switching plugin. -->
+    <rule ref="WordPress.WP.Capabilities">
+        <properties>
+            <property name="custom_capabilities" type="array">
+                <element value="switch_to_user"/>
+            </property>
+        </properties>
+    </rule>
 </ruleset>
