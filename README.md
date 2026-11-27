@@ -118,6 +118,14 @@ The guard runs again on `parse_request`, when WordPress knows what it will serve
 
 **Users with 2FA whose browser session was not opened with it** (for example a session from before 2FA was set up) are sent to upstream's revalidation first. REST and AJAX requests from such a session get `403`. A logged-in request without a session cookie fails closed; application passwords follow upstream's API-login policy.
 
+**User Switching.** A session that the [User Switching](https://wordpress.org/plugins/user-switching/) plugin opened for another user does not have to revalidate when all of these hold:
+
+- the session it was switched from still exists and was opened with 2FA;
+- the browser still has User Switching's old-user cookie for that exact session;
+- the original user may still switch to this user (`switch_to_user`).
+
+Otherwise the target user's code is asked, as before. The switched session itself does not count as a 2FA login, so changing the target's 2FA, creating recovery codes and staff recovery stay blocked. Switching onward from a switched session (A to B to C) asks for C's code.
+
 Which methods count as a second factor is decided by upstream Two Factor and the site's provider settings (app, email codes, recovery codes, SMS where installed). Any enabled method counts as proof for changes. Sites decide which methods to enable.
 
 ## Hooks

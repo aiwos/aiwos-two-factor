@@ -1,6 +1,7 @@
 {
 	"plugins": [
 		"https://downloads.wordpress.org/plugin/two-factor.0.17.0.zip",
+		"https://downloads.wordpress.org/plugin/user-switching.1.12.2.zip",
 		"."
 	]
 }
