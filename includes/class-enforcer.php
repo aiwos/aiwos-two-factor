@@ -76,7 +76,44 @@ final class Enforcer {
 			// any other login (e.g. an auth cookie sent without the logged-in cookie) fails closed.
 			return ! did_action( 'application_password_did_authenticate' );
 		}
-		return ! Two_Factor_Core::is_current_user_session_two_factor();
+		if ( Two_Factor_Core::is_current_user_session_two_factor() ) {
+			return false;
+		}
+		// User Switching: the person behind this browser proved 2FA in the session they switched from.
+		return ! self::switched_from_two_factor_session();
+	}
+
+	/**
+	 * Whether User Switching opened the current session from a live session that was opened
+	 * with 2FA, the browser still holds that session's old-user cookie, and the original user
+	 * may still switch to the current user.
+	 *
+	 * The switched session itself is not marked as a 2FA session, so recent-proof actions
+	 * (changing the target's 2FA, recovery codes, staff reset) stay blocked.
+	 */
+	private static function switched_from_two_factor_session(): bool {
+		if ( ! function_exists( 'current_user_switched' ) || ! function_exists( 'user_switching_get_olduser_cookie' ) ) {
+			return false;
+		}
+		$session    = Two_Factor_Core::get_current_user_session();
+		$from_id    = (int) ( $session['switched_from_id'] ?? 0 );
+		$from_token = (string) ( $session['switched_from_session'] ?? '' );
+		if ( $from_id <= 0 || '' === $from_token ) {
+			return false;
+		}
+		// The old-user cookie must be valid, belong to that user and carry that very session.
+		$old_user = current_user_switched();
+		$cookie   = wp_parse_auth_cookie( (string) user_switching_get_olduser_cookie(), 'logged_in' );
+		if ( ! $old_user instanceof WP_User || $old_user->ID !== $from_id
+			|| ! is_array( $cookie ) || ! hash_equals( $from_token, (string) $cookie['token'] ) ) {
+			return false;
+		}
+		// Rights may have been withdrawn since the switch.
+		if ( ! user_can( $old_user, 'switch_to_user', get_current_user_id() ) ) {
+			return false;
+		}
+		$origin = \WP_Session_Tokens::get_instance( $from_id )->get( $from_token );
+		return is_array( $origin ) && ! empty( $origin['two-factor-login'] );
 	}
 
 	/**

@@ -1,5 +1,8 @@
 == Changelog ==
 
+= 2.0.1 =
+- User Switching: a session switched to from a live session that was opened with 2FA no longer has to revalidate, as long as the browser holds that session's old-user cookie and the original user may still switch to the target. The switched session itself is not marked as a 2FA session, so recent-proof actions stay blocked.
+
 = 2.0.0 =
 - Rewritten from a customized copy of Two Factor into an add-on on top of the upstream Two Factor plugin (0.17.0+). Two Factor itself is no longer patched; install upstream `two-factor` next to this plugin. Replaces force-two-factor.
 - [two-factor-set-totp]: POST form, secret kept server-side (expires after 30 minutes) until a 6-digit code proves it; code recorded as used; TOTP primary; other sessions logged out. A secret kept while TOTP is off is never reactivated.

@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Aiwos Two Factor
  * Description:       Frontend authenticator setup, mandatory 2FA and account recovery on top of the upstream Two Factor plugin. Replaces the customized Two Factor fork and force-two-factor.
- * Version:           2.0.0
+ * Version:           2.0.1
  * Requires at least: 7.0
  * Requires PHP:      8.1
  * Requires Plugins:  two-factor

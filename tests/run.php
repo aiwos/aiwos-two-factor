@@ -152,6 +152,69 @@ try {
 	$check( 'password-only session of a 2FA user must revalidate', Enforcer::must_revalidate() && is_wp_error( Enforcer::guard_rest( null ) ) );
 	aiwos_tf_log_in( $fresh, 'Two_Factor_Totp' );
 	$check( '2FA session passes', ! Enforcer::must_revalidate() && null === Enforcer::guard_rest( null ) );
+
+	// User Switching: a session switched to from a live 2FA session needs no new code, but is
+	// not a 2FA session itself. Built the way switch_to_user() builds it.
+	$switch_to = static function ( WP_User $from, string $from_token, WP_User $to, ?string $cookie_token = null ): string {
+		wp_set_current_user( 0 );
+		$expiration = time() + HOUR_IN_SECONDS;
+		$manager    = WP_Session_Tokens::get_instance( $to->ID );
+		$token      = $manager->create( $expiration );
+		$manager->update(
+			$token,
+			array_merge(
+				$manager->get( $token ),
+				array(
+					'switched_from_id'      => $from->ID,
+					'switched_from_session' => $from_token,
+				)
+			)
+		);
+		$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $to->ID, $expiration, 'logged_in', $token );
+		if ( defined( 'USER_SWITCHING_OLDUSER_COOKIE' ) ) {
+			$_COOKIE[ USER_SWITCHING_OLDUSER_COOKIE ] = wp_generate_auth_cookie( $from->ID, $expiration, 'logged_in', $cookie_token ?? $from_token );
+		}
+		wp_set_current_user( $to->ID );
+		return $token;
+	};
+
+	$switch_admin  = aiwos_tf_user( 'administrator' );
+	$switch_target = aiwos_tf_user( 'subscriber' );
+	aiwos_tf_link_app( $switch_admin );
+	aiwos_tf_link_app( $switch_target );
+	$admin_2fa = aiwos_tf_log_in( $switch_admin, 'Two_Factor_Totp' );
+	$switch_to( $switch_admin, $admin_2fa, $switch_target );
+	if ( function_exists( 'current_user_switched' ) ) {
+		$check( 'switched from a 2FA session: no revalidation', ! Enforcer::must_revalidate() && null === Enforcer::guard_rest( null ) );
+		$check( 'switched session is not a 2FA session (no recent proof, no 2FA changes)', ! Two_Factor_Core::is_current_user_session_two_factor() && ! Account::has_recent_proof() && ! Two_Factor_Core::current_user_can_update_two_factor_options( 'save' ) );
+		$admin_pw = aiwos_tf_log_in( $switch_admin );
+		$switch_to( $switch_admin, $admin_pw, $switch_target );
+		$check( 'switched from a password-only session: revalidate', Enforcer::must_revalidate() );
+		$switch_to( $switch_admin, $admin_2fa, $switch_target, $admin_pw );
+		$check( 'old-user cookie of another session: revalidate', Enforcer::must_revalidate() );
+		$switch_to( $switch_admin, $admin_2fa, $switch_target );
+		unset( $_COOKIE[ USER_SWITCHING_OLDUSER_COOKIE ] );
+		$check( 'no old-user cookie: revalidate', Enforcer::must_revalidate() );
+		$switch_to( $switch_admin, $admin_2fa, $switch_target );
+		$switch_admin->set_role( 'subscriber' );
+		$check( 'original user may no longer switch: revalidate', Enforcer::must_revalidate() );
+		$switch_admin->set_role( 'administrator' );
+		$check( 'rights back: no revalidation (control)', ! Enforcer::must_revalidate() );
+		$switch_third = aiwos_tf_user( 'subscriber' );
+		aiwos_tf_link_app( $switch_third );
+		$chain = $switch_to( $switch_admin, $admin_2fa, $switch_target );
+		$switch_to( $switch_target, $chain, $switch_third );
+		$check( 'chain admin to B to C: revalidate (B never proved 2FA)', Enforcer::must_revalidate() );
+		$switch_to( $switch_admin, $admin_2fa, $switch_target );
+		WP_Session_Tokens::get_instance( $switch_admin->ID )->destroy( $admin_2fa );
+		$check( 'original session ended: revalidate', Enforcer::must_revalidate() );
+		unset( $_COOKIE[ USER_SWITCHING_OLDUSER_COOKIE ] );
+		// Validating the old-user cookie flags this run as cookie-authenticated for REST; undo for later checks.
+		$GLOBALS['wp_rest_auth_cookie'] = false;
+	} else {
+		$check( 'User Switching not active: switched session must revalidate', Enforcer::must_revalidate() );
+		echo "NOTE: user-switching not active, switch checks limited\n";
+	}
 	$check(
 		'XML-RPC login of user without 2FA blocked',
 		( static function () {
